@@ -11,7 +11,6 @@ public:
     virtual void run(void* ctx) = 0;
 };
 
-
 template<typename F>
 class ExecutionUnitAdaptor final : public ExecutionUnit {
 public:
@@ -32,7 +31,7 @@ private:
 };
 
 template<typename F>
-ExecutionUnitAdaptor<F> makeExecutionUnitAdaptor(F f) {
+ExecutionUnitAdaptor<F> createExecutionUnit(F f) {
     static_assert(
         std::is_invocable_v<F, void*>,
         "Error: lambda must be callable with an void* argument"

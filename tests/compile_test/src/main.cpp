@@ -42,7 +42,7 @@ int main() {
     TestExecutionUnit unitB{"B"};
 
     /* ExcutionUnit: lambda version */
-    auto unitC = pidux::makeExecutionUnitAdaptor([](auto* ctx) {
+    auto unitC = pidux::createExecutionUnit([](auto* ctx) {
         auto const sleepTime = std::chrono::milliseconds{std::rand() % 500};
 
         std::cout << "C";
