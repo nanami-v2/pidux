@@ -8,17 +8,17 @@
 
 namespace {
     
-struct Context {
+struct TestContext {
     int randBase{500};
 };
 
-class TestExecutionUnit final : public pidux::ExecutionUnit {
+class TestExecutionUnit final : public pidux::ExecutionUnit<TestContext> {
 public:
     explicit TestExecutionUnit(char const* unitName):
         unitName_{unitName}
     {}
-    void run(void* ctx) override {
-        auto const randBase = static_cast<Context*>(ctx)->randBase;
+    void run(TestContext& ctx) override {
+        auto const randBase = ctx.randBase;
         auto const sleepTime = std::chrono::milliseconds{std::rand() % randBase};
 
         std::cout << unitName_.c_str() << ",";
@@ -28,20 +28,27 @@ private:
     std::string unitName_;
 };
 
-class TestExecutionLineCallback final : public pidux::ExecutionLineCallback {
+class TestExecutionLineCallback final : public pidux::ExecutionLineCallback<TestContext> {
 public:
     explicit TestExecutionLineCallback(char const* lineName):
         lineName_{lineName}
-    {}
-    void onLineStart(void* ctx) override {
-        std::cout
-            << "line '" << this->lineName_ << "' start" << std::endl;
+    {
+        std::cout << "constructed...callback for " << this->lineName_ << std::endl;
     }
-    void onLineEnd(void* ctx) noexcept override {
-        std::cout
-            << "line '" << this->lineName_ << "' end" << std::endl;
+    ~TestExecutionLineCallback() noexcept {
+        std::cout << "destructed...callback for " << this->lineName_ << std::endl;
     }
-    void onFatalError(void* ctx, std::exception_ptr error) noexcept {
+    void onLineStart(TestContext& ctx) override {
+        std::cout
+            << "line '" << this->lineName_ << "' start" << std::endl
+            << std::flush;
+    }
+    void onLineEnd(TestContext& ctx) noexcept override {
+        std::cout
+            << "line '" << this->lineName_ << "' end" << std::endl
+            << std::flush;
+    }
+    void onFatalError(TestContext& ctx, std::exception_ptr error) noexcept {
         try {
             std::rethrow_exception(error);
         }
@@ -54,22 +61,24 @@ public:
                 << "[FATAL] unknown error" << std::endl;
         }
     }
-    void onGateUnlocked(void* ctx, pidux::Gate& gate) {}
-    void onExecutionUnitStart(void* ctx, pidux::ExecutionUnit& executionUnit) {
+    void onGateUnlocked(TestContext& ctx, pidux::Gate& gate) {}
+    void onExecutionUnitStart(TestContext& ctx, pidux::ExecutionUnit<TestContext>& executionUnit) {
         std::cout
             << "ExecutionUnit...'"
             << typeid(executionUnit).name()
-            << "' start" << std::endl;
+            << "' start" << std::endl
+            << std::flush;
     }
-    void onExecutionUnitEnd(void* ctx, pidux::ExecutionUnit& executionUnit) {
+    void onExecutionUnitEnd(TestContext& ctx, pidux::ExecutionUnit<TestContext>& executionUnit) {
         std::cout
             << "ExecutionUnit...'"
             << typeid(executionUnit).name()
-            << "' end" << std::endl;
+            << "' end" << std::endl
+            << std::flush;
     }
     void onExecutionUnitError(
-        void* ctx,
-        pidux::ExecutionUnit& executionUnit,
+        TestContext& ctx,
+        pidux::ExecutionUnit<TestContext>& executionUnit,
         std::exception_ptr executionUnitError
     ) noexcept {
         try {
@@ -92,6 +101,8 @@ private:
     std::string lineName_;
 };
 
+using TestExecutionLine = pidux::ExecutionLine<TestContext>;
+
 } /* namespace */
 
 int main() {
@@ -99,35 +110,47 @@ int main() {
         Line1: ---A---|---B---
         Line2: -------|---C---
     */
+    TestContext ctx{};
+
     /* ExcutionUnit: class version */
     auto unitA = TestExecutionUnit{"A"};
     auto unitB = TestExecutionUnit{"B"};
     /* ExcutionUnit: lambda version */
-    auto unitC = pidux::createExecutionUnit([](auto* ctx) {
-        auto const randBase = static_cast<Context*>(ctx)->randBase;
+    auto unitC = pidux::createExecutionUnit<TestContext>([](auto& ctx) {
+        auto const randBase = ctx.randBase;
         auto const sleepTime = std::chrono::milliseconds{std::rand() % randBase};
 
         std::cout << "C,";
         std::this_thread::sleep_for(sleepTime);
     });
     pidux::Gate syncGate{};
+    {      
+        TestExecutionLineCallback line1Callback{"Line1"};
+        TestExecutionLineCallback line2Callback{"Line2"};
+        /*
+            Line1: ---A---|---B---
+            Line2: -------|---C---
+        */
+        TestExecutionLine::CreationParams const line1CreationParams{
+            {unitA, syncGate, unitB},
+            &line1Callback
+        };
+        TestExecutionLine::CreationParams const line2CreationParams{
+            {syncGate, unitC},
+            &line2Callback
+        };
+        TestExecutionLine line1{line1CreationParams};
+        TestExecutionLine line2{line2CreationParams};
 
-    auto line1CreationParams = pidux::ExecutionLine::CreationParams{
-        {unitA, syncGate, unitB}
-    };
-    auto line2CreationParams = pidux::ExecutionLine::CreationParams{
-        {syncGate, unitC}
-    };
-    pidux::ExecutionLine line1{line1CreationParams};
-    pidux::ExecutionLine line2{line2CreationParams};
+        line1.start(ctx);
+        line2.start(ctx);
 
-    Context ctx{};
-    TestExecutionLineCallback line1Callback{"Line1"};
-    TestExecutionLineCallback line2Callback{"Line2"};
+        std::this_thread::sleep_for(std::chrono::seconds{5});
 
-    line1.start(&ctx, line1Callback);
-    line2.start(&ctx, line2Callback);
+        //line1.destroy();
+        //line2.destroy();
+    }
+    std::this_thread::sleep_for(std::chrono::seconds{1});
 
-    std::this_thread::sleep_for(std::chrono::seconds{5});
     return 0;
 }

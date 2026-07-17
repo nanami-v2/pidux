@@ -19,10 +19,11 @@ namespace pidux {
 #define PIDUX_EXECUTION_LINE_ELEMENT_MAX_COUNT 64
 #endif
 
+template<typename T>
 class ExecutionLine {
 public:
     using Element = std::variant<
-        std::reference_wrapper<ExecutionUnit>,
+        std::reference_wrapper<ExecutionUnit<T>>,
         std::reference_wrapper<Gate>
     >;
     static constexpr std::size_t ElementMaxCount = PIDUX_EXECUTION_LINE_ELEMENT_MAX_COUNT;
@@ -32,6 +33,7 @@ public:
             ExecutionLine::Element,
             ExecutionLine::ElementMaxCount
         > lineElements;
+        ExecutionLineCallback<T>* callback{nullptr};
     };
 public:
     explicit ExecutionLine(CreationParams const& params);
@@ -42,8 +44,7 @@ public:
     ExecutionLine& operator=(ExecutionLine const&) = delete;
     ExecutionLine& operator=(ExecutionLine&&) noexcept = delete;
 
-    void start(void* ctx);
-    void start(void* ctx, ExecutionLineCallback& callback);
+    void start(T& ctx);
     void destroy() noexcept;
 
 private:
@@ -56,7 +57,7 @@ private:
     std::condition_variable sharedDataCv_;
     std::mutex              sharedDataMutex_;
 
-    class GateEventHandler final : public Gate::Callback {
+    class GateEventHandler final : public GateCallback {
     public:
         explicit GateEventHandler(
             std::size_t              gateIndex,
@@ -85,15 +86,17 @@ private:
     
     boost::container::static_vector<GateEventHandler, ElementMaxCount> gateEventHandlers_;
     boost::container::static_vector<Element, ElementMaxCount> lineElements_;
-    ExecutionLineCallback* callback_{nullptr};
+    ExecutionLineCallback<T>* callback_{nullptr};
 };
 
 /*-----------------------------------------------------------------------------
     Implementation
 -----------------------------------------------------------------------------*/
 
-inline ExecutionLine::ExecutionLine(CreationParams const& params):
-    lineElements_{params.lineElements}
+template<typename T>
+inline ExecutionLine<T>::ExecutionLine(CreationParams const& params):
+    lineElements_{params.lineElements},
+    callback_{params.callback}
 {
     std::size_t gateIndex = 0;
 
@@ -107,7 +110,7 @@ inline ExecutionLine::ExecutionLine(CreationParams const& params):
                     this->sharedDataMutex_
                 }
             );
-            refGate->get().connectToLine(
+            refGate->get().addLockDependency(
                 this->gateEventHandlers_.back()
             );
             gateIndex++;
@@ -115,12 +118,14 @@ inline ExecutionLine::ExecutionLine(CreationParams const& params):
     }
 }
 
-inline ExecutionLine::~ExecutionLine() noexcept {
+template<typename T>
+inline ExecutionLine<T>::~ExecutionLine() noexcept {
     this->destroy();
 }
 
-inline void ExecutionLine::start(void* ctx) {
-    this->thread_ = std::thread{[this, ctx]() {
+template<typename T>
+inline void ExecutionLine<T>::start(T& ctx) {
+    this->thread_ = std::thread{[this, &ctx]() {
         try {
             if (this->callback_)
                 this->callback_->onLineStart(ctx);
@@ -130,7 +135,7 @@ inline void ExecutionLine::start(void* ctx) {
                 bool        shutdownFlag = false;
 
                 for (auto& e : this->lineElements_) {
-                    auto* const refExecutionUnit = std::get_if<std::reference_wrapper<ExecutionUnit>>(&e);
+                    auto* const refExecutionUnit = std::get_if<std::reference_wrapper<ExecutionUnit<T>>>(&e);
                     auto* const refGate          = std::get_if<std::reference_wrapper<Gate>>(&e);
 
                     if (refExecutionUnit) {
@@ -199,13 +204,8 @@ inline void ExecutionLine::start(void* ctx) {
     }};
 }
 
-inline void ExecutionLine::start(void* ctx, ExecutionLineCallback& callback) {
-    this->callback_ = &callback;
-    this->start(ctx);
-}
-
-
-inline void ExecutionLine::destroy() noexcept {
+template<typename T>
+inline void ExecutionLine<T>::destroy() noexcept {
     if (this->thread_.joinable()) {
         {
             std::unique_lock<std::mutex> lock{this->sharedDataMutex_};
@@ -213,6 +213,17 @@ inline void ExecutionLine::destroy() noexcept {
             this->sharedDataCv_.notify_one();
         }
         this->thread_.join();
+
+        std::size_t gateIndex = 0;
+
+        for (auto& e : this->lineElements_) {
+            if (auto* const refGate = std::get_if<std::reference_wrapper<Gate>>(&e)) {
+                refGate->get().removeLockDependency(
+                    this->gateEventHandlers_[gateIndex]
+                );
+                gateIndex++;
+            }
+        }
     }
 }
 
