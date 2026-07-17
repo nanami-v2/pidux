@@ -4,10 +4,11 @@
 
 namespace pidux {
 
+template<typename T>
 class ExecutionUnit {
 public:
     virtual ~ExecutionUnit() noexcept = default;
-    virtual void run(void* ctx) = 0;
+    virtual void run(T& ctx) = 0;
 };
 
 } /* namespace pidux */

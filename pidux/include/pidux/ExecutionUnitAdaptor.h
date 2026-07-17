@@ -6,8 +6,8 @@
 
 namespace pidux {
 
-template<typename F>
-class ExecutionUnitAdaptor final : public ExecutionUnit {
+template<typename T, typename F>
+class ExecutionUnitAdaptor final : public ExecutionUnit<T> {
 public:
     explicit ExecutionUnitAdaptor(F f): f_{f}
     {}
@@ -18,20 +18,20 @@ public:
     ExecutionUnitAdaptor& operator=(ExecutionUnitAdaptor const&) = default;
     ExecutionUnitAdaptor& operator=(ExecutionUnitAdaptor&&) noexcept = default;
 
-    void run(void* ctx) override {
+    void run(T& ctx) override {
         this->f_(ctx);
     }
 private:
     F f_;
 };
 
-template<typename F>
-ExecutionUnitAdaptor<F> createExecutionUnit(F f) {
+template<typename T, typename F>
+ExecutionUnitAdaptor<T, F> createExecutionUnit(F f) {
     static_assert(
-        std::is_invocable_v<F, void*>,
+        std::is_invocable_v<F, T>,
         "Error: lambda must be callable with an void* argument"
     );
-    return ExecutionUnitAdaptor<F>(f);
+    return ExecutionUnitAdaptor<T, F>(f);
 }
 
 } /* namespace pidux */

@@ -19,10 +19,11 @@ namespace pidux {
 #define PIDUX_EXECUTION_LINE_ELEMENT_MAX_COUNT 64
 #endif
 
+template<typename T>
 class ExecutionLine {
 public:
     using Element = std::variant<
-        std::reference_wrapper<ExecutionUnit>,
+        std::reference_wrapper<ExecutionUnit<T>>,
         std::reference_wrapper<Gate>
     >;
     static constexpr std::size_t ElementMaxCount = PIDUX_EXECUTION_LINE_ELEMENT_MAX_COUNT;
@@ -32,7 +33,7 @@ public:
             ExecutionLine::Element,
             ExecutionLine::ElementMaxCount
         > lineElements;
-        ExecutionLineCallback* callback{nullptr};
+        ExecutionLineCallback<T>* callback{nullptr};
     };
 public:
     explicit ExecutionLine(CreationParams const& params);
@@ -43,7 +44,7 @@ public:
     ExecutionLine& operator=(ExecutionLine const&) = delete;
     ExecutionLine& operator=(ExecutionLine&&) noexcept = delete;
 
-    void start(void* ctx);
+    void start(T& ctx);
     void destroy() noexcept;
 
 private:
@@ -85,14 +86,15 @@ private:
     
     boost::container::static_vector<GateEventHandler, ElementMaxCount> gateEventHandlers_;
     boost::container::static_vector<Element, ElementMaxCount> lineElements_;
-    ExecutionLineCallback* callback_{nullptr};
+    ExecutionLineCallback<T>* callback_{nullptr};
 };
 
 /*-----------------------------------------------------------------------------
     Implementation
 -----------------------------------------------------------------------------*/
 
-inline ExecutionLine::ExecutionLine(CreationParams const& params):
+template<typename T>
+inline ExecutionLine<T>::ExecutionLine(CreationParams const& params):
     lineElements_{params.lineElements},
     callback_{params.callback}
 {
@@ -116,12 +118,14 @@ inline ExecutionLine::ExecutionLine(CreationParams const& params):
     }
 }
 
-inline ExecutionLine::~ExecutionLine() noexcept {
+template<typename T>
+inline ExecutionLine<T>::~ExecutionLine() noexcept {
     this->destroy();
 }
 
-inline void ExecutionLine::start(void* ctx) {
-    this->thread_ = std::thread{[this, ctx]() {
+template<typename T>
+inline void ExecutionLine<T>::start(T& ctx) {
+    this->thread_ = std::thread{[this, &ctx]() {
         try {
             if (this->callback_)
                 this->callback_->onLineStart(ctx);
@@ -131,7 +135,7 @@ inline void ExecutionLine::start(void* ctx) {
                 bool        shutdownFlag = false;
 
                 for (auto& e : this->lineElements_) {
-                    auto* const refExecutionUnit = std::get_if<std::reference_wrapper<ExecutionUnit>>(&e);
+                    auto* const refExecutionUnit = std::get_if<std::reference_wrapper<ExecutionUnit<T>>>(&e);
                     auto* const refGate          = std::get_if<std::reference_wrapper<Gate>>(&e);
 
                     if (refExecutionUnit) {
@@ -200,7 +204,8 @@ inline void ExecutionLine::start(void* ctx) {
     }};
 }
 
-inline void ExecutionLine::destroy() noexcept {
+template<typename T>
+inline void ExecutionLine<T>::destroy() noexcept {
     if (this->thread_.joinable()) {
         {
             std::unique_lock<std::mutex> lock{this->sharedDataMutex_};
