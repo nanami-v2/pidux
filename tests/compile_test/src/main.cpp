@@ -61,7 +61,7 @@ public:
                 << "[FATAL] unknown error" << std::endl;
         }
     }
-    void onGateUnlocked(TestContext& ctx, pidux::SyncGate& syncGate) {}
+    void onSyncGateUnlocked(TestContext& ctx, pidux::SyncGate& syncGate) {}
     void onExecutionUnitStart(TestContext& ctx, pidux::ExecutionUnit<TestContext>& executionUnit) {
         std::cout
             << "ExecutionUnit...'"

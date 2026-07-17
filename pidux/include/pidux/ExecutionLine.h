@@ -188,7 +188,7 @@ inline void ExecutionLine<T>::start(T& ctx) {
                             return;
                         }
                         if (this->callback_)
-                            this->callback_->onGateUnlocked(ctx, refSyncGate->get());
+                            this->callback_->onSyncGateUnlocked(ctx, refSyncGate->get());
 
                         gateCursor++;
                     }
