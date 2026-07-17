@@ -2,8 +2,8 @@
 #include <pidux.h>
 
 int main() {
-    pidux::Gate ignitionGate{};
-    pidux::ExecutionLine line{ignitionGate};
+    pidux::ExecutionLine::CreationParams params{};
+    pidux::ExecutionLine line{params};
 
     return 0;
 }

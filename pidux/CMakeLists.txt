@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.26)
-project(pidux VERSION 1.2.0 LANGUAGES CXX)
+project(pidux VERSION 2.0.0 LANGUAGES CXX)
 
 include(GNUInstallDirs)
 include(CMakePackageConfigHelpers)
@@ -28,7 +28,7 @@ install(
     NAMESPACE pidux::
     FILE "pidux-targets.cmake"
 )
-# install: config file
+# generate & install: config file
 configure_package_config_file(
     ${CMAKE_CURRENT_SOURCE_DIR}/cmake/pidux-config.cmake.in
     ${CMAKE_CURRENT_BINARY_DIR}/cmake/pidux-config.cmake
@@ -38,7 +38,7 @@ install(
     FILES ${CMAKE_CURRENT_BINARY_DIR}/cmake/pidux-config.cmake
     DESTINATION ${CMAKE_INSTALL_LIBDIR}/pidux/cmake
 )
-# install: version file
+# generate & install: version file
 write_basic_package_version_file(
     ${CMAKE_CURRENT_BINARY_DIR}/cmake/pidux-config-version.cmake
     VERSION ${PROJECT_VERSION}
