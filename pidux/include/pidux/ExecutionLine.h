@@ -121,73 +121,79 @@ inline ExecutionLine::~ExecutionLine() noexcept {
 
 inline void ExecutionLine::start(void* ctx) {
     this->thread_ = std::thread{[this, ctx]() {
-        /* start */
-        if (this->callback_) {
-            try {
+        try {
+            if (this->callback_)
                 this->callback_->onLineStart(ctx);
-            }
-            catch (...) {
-                this->callback_->onFatalError(ctx, std::current_exception());
-                this->callback_->onLineEnd(ctx);
-                return;
+
+            while (true) {
+                std::size_t gateCursor   = 0;
+                bool        shutdownFlag = false;
+
+                for (auto& e : this->lineElements_) {
+                    auto* const refExecutionUnit = std::get_if<std::reference_wrapper<ExecutionUnit>>(&e);
+                    auto* const refGate          = std::get_if<std::reference_wrapper<Gate>>(&e);
+
+                    if (refExecutionUnit) {
+                        {
+                            std::unique_lock<std::mutex> lock{this->sharedDataMutex_};
+                            shutdownFlag = this->sharedData_.shutdownFlag;
+                        }
+                        if (shutdownFlag) {
+                            if (this->callback_)
+                                this->callback_->onLineEnd(ctx);
+
+                            return;
+                        }
+                        try {
+                            if (this->callback_)
+                                this->callback_->onExecutionUnitStart(ctx, refExecutionUnit->get());
+
+                            refExecutionUnit->get().run(ctx);
+
+                            if (this->callback_)
+                                this->callback_->onExecutionUnitEnd(ctx, refExecutionUnit->get());
+                        }
+                        catch (...) {
+                            if (this->callback_) {
+                                this->callback_->onExecutionUnitError(ctx, refExecutionUnit->get(), std::current_exception());
+                                this->callback_->onLineEnd(ctx);
+                            }
+                            return;
+                        }
+                    }
+                    if (refGate) {
+                        refGate->get().requestUnlock();
+                        {
+                            std::unique_lock<std::mutex> lock{this->sharedDataMutex_};
+                            this->sharedDataCv_.wait(lock, [this, gateCursor] {
+                                return (
+                                    this->sharedData_.shutdownFlag ||
+                                    this->sharedData_.gateUnlockedFlags[gateCursor]
+                                );
+                            });
+                            if (this->sharedData_.shutdownFlag)
+                                shutdownFlag = true;
+                            else
+                                this->sharedData_.gateUnlockedFlags[gateCursor] = false;
+                        }
+                        if (shutdownFlag) {
+                            if (this->callback_)
+                                this->callback_->onLineEnd(ctx);
+
+                            return;
+                        }
+                        if (this->callback_)
+                            this->callback_->onGateUnlocked(ctx, refGate->get());
+
+                        gateCursor++;
+                    }
+                }
             }
         }
-        /* steady state */
-        while (true) {
-            std::size_t gateCursor   = 0;
-            bool        shutdownFlag = false;
-
-            for (auto& e : this->lineElements_) {
-                auto* const refExecutionUnit = std::get_if<std::reference_wrapper<ExecutionUnit>>(&e);
-                auto* const refGate          = std::get_if<std::reference_wrapper<Gate>>(&e);
-
-                if (refExecutionUnit) {
-                    {
-                        std::unique_lock<std::mutex> lock{this->sharedDataMutex_};
-                        shutdownFlag = this->sharedData_.shutdownFlag;
-                    }
-                    if (shutdownFlag) {
-                        if (this->callback_)
-                            this->callback_->onLineEnd(ctx);
-                        return;
-                    }
-                    try {
-                        refExecutionUnit->get().run(ctx);
-                    }
-                    catch (...) {
-                        if (this->callback_) {
-                            this->callback_->onExecutionUnitError(
-                                ctx,
-                                refExecutionUnit->get(),
-                                std::current_exception()
-                            );
-                            this->callback_->onLineEnd(ctx);
-                        }
-                        return;
-                    }
-                }
-                if (refGate) {
-                    refGate->get().requestUnlock();
-                    {
-                        std::unique_lock<std::mutex> lock{this->sharedDataMutex_};
-                        this->sharedDataCv_.wait(lock, [this, gateCursor] {
-                            return (
-                                this->sharedData_.shutdownFlag ||
-                                this->sharedData_.gateUnlockedFlags[gateCursor]
-                            );
-                        });
-                        if (this->sharedData_.shutdownFlag)
-                            shutdownFlag = true;
-                        else
-                            this->sharedData_.gateUnlockedFlags[gateCursor] = false;
-                    }
-                    if (shutdownFlag) {
-                        if (this->callback_)
-                            this->callback_->onLineEnd(ctx);
-                        return;
-                    }
-                    gateCursor++;
-                }
+        catch (...) {
+            if (this->callback_) {
+                this->callback_->onFatalError(ctx, std::current_exception());
+                this->callback_->onLineEnd(ctx);
             }
         }
     }};
