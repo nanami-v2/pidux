@@ -28,8 +28,8 @@ private:
 template<typename T, typename F>
 ExecutionUnitAdaptor<T, F> createExecutionUnit(F f) {
     static_assert(
-        std::is_invocable_v<F, T>,
-        "Error: lambda must be callable with an void* argument"
+        std::is_invocable_v<F, T&>,
+        "Error: lambda must be callable with an T&"
     );
     return ExecutionUnitAdaptor<T, F>(f);
 }
