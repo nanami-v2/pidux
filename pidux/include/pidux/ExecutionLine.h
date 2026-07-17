@@ -9,7 +9,7 @@
 #include <variant>
 #include <boost/container/static_vector.hpp>
 
-#include "./Gate.h"
+#include "./SyncGate.h"
 #include "./ExecutionUnit.h"
 #include "./ExecutionLineCallback.h"
 
@@ -24,7 +24,7 @@ class ExecutionLine {
 public:
     using Element = std::variant<
         std::reference_wrapper<ExecutionUnit<T>>,
-        std::reference_wrapper<Gate>
+        std::reference_wrapper<SyncGate>
     >;
     static constexpr std::size_t ElementMaxCount = PIDUX_EXECUTION_LINE_ELEMENT_MAX_COUNT;
 
@@ -50,22 +50,22 @@ public:
 private:
     struct SharedData {
         bool                         shutdownFlag{false};
-        std::bitset<ElementMaxCount> gateUnlockedFlags{};
+        std::bitset<ElementMaxCount> syncGateUnlockedFlags{};
     };
     std::thread             thread_;
     SharedData              sharedData_;
     std::condition_variable sharedDataCv_;
     std::mutex              sharedDataMutex_;
 
-    class GateEventHandler final : public GateCallback {
+    class SyncGateEventHandler final : public SyncGateCallback {
     public:
-        explicit GateEventHandler(
-            std::size_t              gateIndex,
+        explicit SyncGateEventHandler(
+            std::size_t              syncGateIndex,
             SharedData&              sharedData,
             std::condition_variable& sharedDataCv,
             std::mutex&              sharedDataMutex
         ):
-            gateIndex{gateIndex},
+            syncGateIndex{syncGateIndex},
             sharedData{sharedData},
             sharedDataCv{sharedDataCv},
             sharedDataMutex{sharedDataMutex}
@@ -74,17 +74,17 @@ private:
         void onUnlocked() override {
             std::unique_lock<std::mutex> lock{sharedDataMutex};
 
-            sharedData.gateUnlockedFlags[gateIndex] = true;
+            sharedData.syncGateUnlockedFlags[syncGateIndex] = true;
             sharedDataCv.notify_one();   
         }
     private:
-        std::size_t              gateIndex;
+        std::size_t              syncGateIndex;
         SharedData&              sharedData;
         std::condition_variable& sharedDataCv;
         std::mutex&              sharedDataMutex;
     };
     
-    boost::container::static_vector<GateEventHandler, ElementMaxCount> gateEventHandlers_;
+    boost::container::static_vector<SyncGateEventHandler, ElementMaxCount> syncGateEventHandlers_;
     boost::container::static_vector<Element, ElementMaxCount> lineElements_;
     ExecutionLineCallback<T>* callback_{nullptr};
 };
@@ -98,22 +98,22 @@ inline ExecutionLine<T>::ExecutionLine(CreationParams const& params):
     lineElements_{params.lineElements},
     callback_{params.callback}
 {
-    std::size_t gateIndex = 0;
+    std::size_t syncGateIndex = 0;
 
     for (auto& e : params.lineElements) {
-        if (auto* const refGate = std::get_if<std::reference_wrapper<Gate>>(&e)) {
-            this->gateEventHandlers_.push_back(
-                GateEventHandler{
-                    gateIndex,
+        if (auto* const refSyncGate = std::get_if<std::reference_wrapper<SyncGate>>(&e)) {
+            this->syncGateEventHandlers_.push_back(
+                SyncGateEventHandler{
+                    syncGateIndex,
                     this->sharedData_,
                     this->sharedDataCv_,
                     this->sharedDataMutex_
                 }
             );
-            refGate->get().addLockDependency(
-                this->gateEventHandlers_.back()
+            refSyncGate->get().addLockDependency(
+                this->syncGateEventHandlers_.back()
             );
-            gateIndex++;
+            syncGateIndex++;
         }
     }
 }
@@ -136,7 +136,7 @@ inline void ExecutionLine<T>::start(T& ctx) {
 
                 for (auto& e : this->lineElements_) {
                     auto* const refExecutionUnit = std::get_if<std::reference_wrapper<ExecutionUnit<T>>>(&e);
-                    auto* const refGate          = std::get_if<std::reference_wrapper<Gate>>(&e);
+                    auto* const refSyncGate = std::get_if<std::reference_wrapper<SyncGate>>(&e);
 
                     if (refExecutionUnit) {
                         {
@@ -166,20 +166,20 @@ inline void ExecutionLine<T>::start(T& ctx) {
                             return;
                         }
                     }
-                    if (refGate) {
-                        refGate->get().requestUnlock();
+                    if (refSyncGate) {
+                        refSyncGate->get().requestUnlock();
                         {
                             std::unique_lock<std::mutex> lock{this->sharedDataMutex_};
                             this->sharedDataCv_.wait(lock, [this, gateCursor] {
                                 return (
                                     this->sharedData_.shutdownFlag ||
-                                    this->sharedData_.gateUnlockedFlags[gateCursor]
+                                    this->sharedData_.syncGateUnlockedFlags[gateCursor]
                                 );
                             });
                             if (this->sharedData_.shutdownFlag)
                                 shutdownFlag = true;
                             else
-                                this->sharedData_.gateUnlockedFlags[gateCursor] = false;
+                                this->sharedData_.syncGateUnlockedFlags[gateCursor] = false;
                         }
                         if (shutdownFlag) {
                             if (this->callback_)
@@ -188,7 +188,7 @@ inline void ExecutionLine<T>::start(T& ctx) {
                             return;
                         }
                         if (this->callback_)
-                            this->callback_->onGateUnlocked(ctx, refGate->get());
+                            this->callback_->onGateUnlocked(ctx, refSyncGate->get());
 
                         gateCursor++;
                     }
@@ -214,14 +214,14 @@ inline void ExecutionLine<T>::destroy() noexcept {
         }
         this->thread_.join();
 
-        std::size_t gateIndex = 0;
+        std::size_t syncGateIndex = 0;
 
         for (auto& e : this->lineElements_) {
-            if (auto* const refGate = std::get_if<std::reference_wrapper<Gate>>(&e)) {
-                refGate->get().removeLockDependency(
-                    this->gateEventHandlers_[gateIndex]
+            if (auto* const refSyncGate = std::get_if<std::reference_wrapper<SyncGate>>(&e)) {
+                refSyncGate->get().removeLockDependency(
+                    this->syncGateEventHandlers_[syncGateIndex]
                 );
-                gateIndex++;
+                syncGateIndex++;
             }
         }
     }

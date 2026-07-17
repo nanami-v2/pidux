@@ -61,7 +61,7 @@ public:
                 << "[FATAL] unknown error" << std::endl;
         }
     }
-    void onGateUnlocked(TestContext& ctx, pidux::Gate& gate) {}
+    void onGateUnlocked(TestContext& ctx, pidux::SyncGate& syncGate) {}
     void onExecutionUnitStart(TestContext& ctx, pidux::ExecutionUnit<TestContext>& executionUnit) {
         std::cout
             << "ExecutionUnit...'"
@@ -123,7 +123,7 @@ int main() {
         std::cout << "C,";
         std::this_thread::sleep_for(sleepTime);
     });
-    pidux::Gate syncGate{};
+    pidux::SyncGate syncGate{};
     {      
         TestExecutionLineCallback line1Callback{"Line1"};
         TestExecutionLineCallback line2Callback{"Line2"};
