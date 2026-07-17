@@ -128,7 +128,6 @@ int main() {
     line1.start(&ctx, line1Callback);
     line2.start(&ctx, line2Callback);
 
-    std::cin.get();
-
+    std::this_thread::sleep_for(std::chrono::seconds{5});
     return 0;
 }
