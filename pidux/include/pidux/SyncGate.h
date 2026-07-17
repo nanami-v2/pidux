@@ -4,34 +4,34 @@
 #include <mutex>
 #include <boost/container/static_vector.hpp>
 
-#include "./GateCallback.h"
+#include "./SyncGateCallback.h"
 
 namespace pidux {
 
-#ifndef PIDUX_GATE_CALLBACK_MAX_COUNT
-#define PIDUX_GATE_CALLBACK_MAX_COUNT 32
+#ifndef PIDUX_SYNC_GATE_CALLBACK_MAX_COUNT
+#define PIDUX_SYNC_GATE_CALLBACK_MAX_COUNT 32
 #endif
 
-class Gate {
+class SyncGate {
 public:
-    static constexpr std::size_t CallbackMaxCount = PIDUX_GATE_CALLBACK_MAX_COUNT;
+    static constexpr std::size_t CallbackMaxCount = PIDUX_SYNC_GATE_CALLBACK_MAX_COUNT;
 public:
-    Gate() noexcept = default;
-    Gate(Gate const&) = delete;
-    Gate(Gate&&) noexcept = delete;
-    ~Gate() noexcept = default;
+    SyncGate() noexcept = default;
+    SyncGate(SyncGate const&) = delete;
+    SyncGate(SyncGate&&) noexcept = delete;
+    ~SyncGate() noexcept = default;
 
-    Gate& operator=(Gate const&) = delete;
-    Gate& operator=(Gate&&) noexcept = delete;
+    SyncGate& operator=(SyncGate const&) = delete;
+    SyncGate& operator=(SyncGate&&) noexcept = delete;
 
-    void addLockDependency(GateCallback& callback);
-    void removeLockDependency(GateCallback& callback);
+    void addLockDependency(SyncGateCallback& callback);
+    void removeLockDependency(SyncGateCallback& callback);
     void requestUnlock() noexcept;
 private:
     struct SharedData {
         unsigned int lockCount{0};
         unsigned int lockCountMax{0};
-        boost::container::static_vector<GateCallback*, CallbackMaxCount> callbacks;
+        boost::container::static_vector<SyncGateCallback*, CallbackMaxCount> callbacks;
     };
     SharedData sharedData_;
     std::mutex sharedDataMutex_;
@@ -40,7 +40,7 @@ private:
 /*-----------------------------------------------------------------------------
     Implementation
 -----------------------------------------------------------------------------*/
-inline void Gate::addLockDependency(GateCallback& callback) {
+inline void SyncGate::addLockDependency(SyncGateCallback& callback) {
     std::unique_lock<std::mutex> const lock{this->sharedDataMutex_};
 
     this->sharedData_.lockCount++;
@@ -48,10 +48,10 @@ inline void Gate::addLockDependency(GateCallback& callback) {
     this->sharedData_.callbacks.push_back(&callback);
 }
 
-inline void Gate::removeLockDependency(GateCallback& callback) {
+inline void SyncGate::removeLockDependency(SyncGateCallback& callback) {
     bool unlocked = false;
     bool locked = false;
-    boost::container::static_vector<GateCallback*, CallbackMaxCount> callbacks;
+    boost::container::static_vector<SyncGateCallback*, CallbackMaxCount> callbacks;
     {
         std::unique_lock<std::mutex> const lock{this->sharedDataMutex_};
 
@@ -85,10 +85,10 @@ inline void Gate::removeLockDependency(GateCallback& callback) {
             callback->onLocked();
 }
 
-inline void Gate::requestUnlock() noexcept {
+inline void SyncGate::requestUnlock() noexcept {
     bool unlocked = false;
     bool locked = false;
-    boost::container::static_vector<GateCallback*, CallbackMaxCount> callbacks;
+    boost::container::static_vector<SyncGateCallback*, CallbackMaxCount> callbacks;
     {
         std::unique_lock<std::mutex> lock{this->sharedDataMutex_};
         if (this->sharedData_.lockCount > 0)

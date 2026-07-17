@@ -4,9 +4,9 @@
 
 namespace pidux {
 
-class GateCallback {
+class SyncGateCallback {
 public:
-    virtual ~GateCallback() noexcept = default;
+    virtual ~SyncGateCallback() noexcept = default;
     virtual void onLocked() = 0;
     virtual void onUnlocked() = 0;
 };

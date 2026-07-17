@@ -2,8 +2,7 @@
 #include <pidux.h>
 
 int main() {
-    pidux::ExecutionLine<int>::CreationParams params{};
-    pidux::ExecutionLine<int> line{params};
+    pidux::ExecutionLine<int> line{{}};
 
     return 0;
 }
