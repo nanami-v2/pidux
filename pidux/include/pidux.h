@@ -4,4 +4,5 @@
 
 #include "./pidux/ExecutionLine.h"
 #include "./pidux/ExecutionUnit.h"
+#include "./pidux/ExecutionUnitAdaptor.h"
 #include "./pidux/Gate.h"

@@ -6,13 +6,19 @@
 
 namespace pidux {
 
+#ifndef PIDUX_GATE_CALLBACK_MAX_COUNT
+#define PIDUX_GATE_CALLBACK_MAX_COUNT 32
+#endif
+
 class Gate {
 public:
     class Callback {
     public:
         virtual ~Callback() noexcept = default;
-        virtual void onUnlocked() noexcept = 0;
+        virtual void onLocked() = 0;
+        virtual void onUnlocked() = 0;
     };
+    static constexpr std::size_t CallbackMaxCount = PIDUX_GATE_CALLBACK_MAX_COUNT;
 public:
     Gate() noexcept = default;
     Gate(Gate const&) = delete;
@@ -22,114 +28,52 @@ public:
     Gate& operator=(Gate const&) = delete;
     Gate& operator=(Gate&&) noexcept = delete;
 
-    void registerCallback(Callback& cb);
-    void unregisterCallback(Callback& cb);
-
-    void incrementLockCount() noexcept;
-    void incrementLockCountAndMax() noexcept;
-    void decrementLockCount() noexcept;
-    void decrementLockCountAndMax() noexcept;
-
-    void lock() noexcept;
-    void unlock() noexcept;    
+    void connectToLine(Callback& callback);
+    void requestUnlock() noexcept;
 private:
     struct SharedData {
         unsigned int lockCount{0};
-        unsigned int lockMax{0};
+        unsigned int lockCountMax{0};
     };
     SharedData sharedData_;
     std::mutex sharedDataMutex_;
-    boost::container::static_vector<Callback*, 32> callbacks_;
+    boost::container::static_vector<Callback*, CallbackMaxCount> callbacks_;
 };
 
 /*-----------------------------------------------------------------------------
     Implementation
 -----------------------------------------------------------------------------*/
-
-inline void Gate::registerCallback(Callback& cb) {
-    auto const ite = std::find(this->callbacks_.begin(), this->callbacks_.end(), &cb);
-    auto const found = (ite != this->callbacks_.end());
-
-    if (!found)
-        this->callbacks_.push_back(&cb);
-}
-
-inline void Gate::unregisterCallback(Callback& cb) {
-    auto const ite = std::find(this->callbacks_.begin(), this->callbacks_.end(), &cb);
-    auto const found = (ite != this->callbacks_.end());
-
-    if (found)
-        this->callbacks_.erase(ite);
-}
-
-inline void Gate::incrementLockCount() noexcept {
-    std::unique_lock<std::mutex> lock{this->sharedDataMutex_};
-
-    if (this->sharedData_.lockCount < this->sharedData_.lockMax)
-        this->sharedData_.lockCount++;
-}
-
-inline void Gate::incrementLockCountAndMax() noexcept {
-    std::unique_lock<std::mutex> lock{this->sharedDataMutex_};
+inline void Gate::connectToLine(Callback& callback) {
+    std::unique_lock<std::mutex> const lock{this->sharedDataMutex_};
 
     this->sharedData_.lockCount++;
-    this->sharedData_.lockMax++;
+    this->sharedData_.lockCountMax++;
+    this->callbacks_.push_back(&callback);
 }
 
-inline void Gate::decrementLockCount() noexcept {
+inline void Gate::requestUnlock() noexcept {
     bool unlocked = false;
-    /* lock area */
+    bool locked = false;    
     {
         std::unique_lock<std::mutex> lock{this->sharedDataMutex_};
-
-        this->sharedData_.lockCount = (this->sharedData_.lockCount > 0) ? this->sharedData_.lockCount - 1 : 0;
+        if (this->sharedData_.lockCount > 0)
+            this->sharedData_.lockCount--;
 
         if (this->sharedData_.lockCount == 0) {
-            this->sharedData_.lockCount = this->sharedData_.lockMax;
+            this->sharedData_.lockCount = this->sharedData_.lockCountMax;
+            /* auto lock */
             unlocked = true;
+            locked = true;
         }
     }
     if (unlocked) {
-        for (auto* const cb : this->callbacks_)
-            cb->onUnlocked();
+        for (auto* const callback : this->callbacks_)
+            callback->onUnlocked();
     }
-}
-
-inline void Gate::decrementLockCountAndMax() noexcept {
-    bool unlocked = false;
-    /* lock area */
-    {
-        std::unique_lock<std::mutex> lock{this->sharedDataMutex_};
-
-        this->sharedData_.lockCount = (this->sharedData_.lockCount > 0) ? this->sharedData_.lockCount - 1 : 0;
-        this->sharedData_.lockMax   = (this->sharedData_.lockMax   > 0) ? this->sharedData_.lockMax   - 1 : 0;
-
-        if (this->sharedData_.lockCount == 0) {
-            this->sharedData_.lockCount = this->sharedData_.lockMax;
-            unlocked = true;
-        }
+    if (locked) {
+        for (auto* const callback : this->callbacks_)
+            callback->onLocked();
     }
-    if (unlocked) {
-        for (auto* const cb : this->callbacks_)
-            cb->onUnlocked();
-    }
-}
-
-inline void Gate::lock() noexcept {
-    std::unique_lock<std::mutex> lock{this->sharedDataMutex_};
-
-    this->sharedData_.lockCount = this->sharedData_.lockMax;
-}
-
-inline void Gate::unlock() noexcept {
-    /* lock area */
-    {
-        std::unique_lock<std::mutex> lock{this->sharedDataMutex_};
-
-        this->sharedData_.lockCount = this->sharedData_.lockMax;
-    }
-    for (auto* const cb : this->callbacks_)
-        cb->onUnlocked();
 }
 
 } /* namespace pidux */

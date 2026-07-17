@@ -11,256 +11,193 @@
 
 #include "./Gate.h"
 #include "./ExecutionUnit.h"
+#include "./ExecutionLineCallback.h"
 
 namespace pidux {
 
+#ifndef PIDUX_EXECUTION_LINE_ELEMENT_MAX_COUNT
+#define PIDUX_EXECUTION_LINE_ELEMENT_MAX_COUNT 64
+#endif
+
 class ExecutionLine {
 public:
-    class Callback {
-    public:
-        virtual ~Callback() noexcept = default;
-        virtual void onStart(void* ctx) = 0;
-        virtual void onFinished(void* ctx) noexcept = 0;
-        virtual void onError(void* ctx, std::exception_ptr error) noexcept = 0;
-        virtual void onExecutionError(void* ctx, ExecutionUnit& executionUnit, std::exception_ptr error) noexcept = 0;
+    using Element = std::variant<
+        std::reference_wrapper<ExecutionUnit>,
+        std::reference_wrapper<Gate>
+    >;
+    static constexpr std::size_t ElementMaxCount = PIDUX_EXECUTION_LINE_ELEMENT_MAX_COUNT;
+
+    struct CreationParams {
+        boost::container::static_vector<
+            ExecutionLine::Element,
+            ExecutionLine::ElementMaxCount
+        > lineElements;
     };
 public:
-    explicit ExecutionLine(Gate& ignitionGate);
-    explicit ExecutionLine(Gate& ignitionGate, Callback& cb);
+    explicit ExecutionLine(CreationParams const& params);
     ExecutionLine(ExecutionLine const&) = delete;
     ExecutionLine(ExecutionLine&&) noexcept = delete;
     ~ExecutionLine() noexcept;
 
     ExecutionLine& operator=(ExecutionLine const&) = delete;
     ExecutionLine& operator=(ExecutionLine&&) noexcept = delete;
-        
-    void setCallback(Callback& cb);
-    void addExecutionUnit(ExecutionUnit& executionUnit);
-    void addGate(Gate& intermediateGate);
 
-    void buildOn(void* ctx = nullptr);
+    void start(void* ctx);
+    void start(void* ctx, ExecutionLineCallback& callback);
     void destroy() noexcept;
+
 private:
     struct SharedData {
-        bool            shutdownFlag{false};
-        bool            ignitionGateUnlockedFlag{false};
-        std::bitset<64> intermediateGateUnlockedFlags{};
+        bool                         shutdownFlag{false};
+        std::bitset<ElementMaxCount> gateUnlockedFlags{};
     };
-    enum class GateType {
-        IgnitionGate,
-        IntermediateGate
-    };
-    class GateCallback final : public Gate::Callback {
-    public:
-        explicit GateCallback(
-            GateType                   gateType,
-            std::optional<std::size_t> gateIndex,
-            SharedData&                sharedData,
-            std::condition_variable&   sharedDataCv,
-            std::mutex&                sharedDataMutex
-        );
-        void onUnlocked() noexcept override;
-    private:
-        GateType                   gateType;
-        std::optional<std::size_t> gateIndex;
-        SharedData&                sharedData;
-        std::condition_variable&   sharedDataCv;
-        std::mutex&                sharedDataMutex;
-    };
-
     std::thread             thread_;
     SharedData              sharedData_;
     std::condition_variable sharedDataCv_;
     std::mutex              sharedDataMutex_;
+
+    class GateEventHandler final : public Gate::Callback {
+    public:
+        explicit GateEventHandler(
+            std::size_t              gateIndex,
+            SharedData&              sharedData,
+            std::condition_variable& sharedDataCv,
+            std::mutex&              sharedDataMutex
+        ):
+            gateIndex{gateIndex},
+            sharedData{sharedData},
+            sharedDataCv{sharedDataCv},
+            sharedDataMutex{sharedDataMutex}
+        {}
+        void onLocked() override {};
+        void onUnlocked() override {
+            std::unique_lock<std::mutex> lock{sharedDataMutex};
+
+            sharedData.gateUnlockedFlags[gateIndex] = true;
+            sharedDataCv.notify_one();   
+        }
+    private:
+        std::size_t              gateIndex;
+        SharedData&              sharedData;
+        std::condition_variable& sharedDataCv;
+        std::mutex&              sharedDataMutex;
+    };
     
-    Gate&        ignitionGate_;
-    GateCallback ignitionGateCallback_;
-    boost::container::static_vector<GateCallback,                        64> intermediateGateCallbacks_;
-    boost::container::static_vector<std::variant<ExecutionUnit*, Gate*>, 64> lineElements_;
-    Callback* callback_{nullptr};
+    boost::container::static_vector<GateEventHandler, ElementMaxCount> gateEventHandlers_;
+    boost::container::static_vector<Element, ElementMaxCount> lineElements_;
+    ExecutionLineCallback* callback_{nullptr};
 };
 
 /*-----------------------------------------------------------------------------
     Implementation
 -----------------------------------------------------------------------------*/
 
-inline ExecutionLine::GateCallback::GateCallback(
-    GateType                   gateType,
-    std::optional<std::size_t> gateIndex,
-    SharedData&                sharedData,
-    std::condition_variable&   sharedDataCv,
-    std::mutex&                sharedDataMutex
-):
-    gateType{gateType},
-    gateIndex{gateIndex},
-    sharedData{sharedData},
-    sharedDataCv{sharedDataCv},
-    sharedDataMutex{sharedDataMutex}
-{}
-
-inline void ExecutionLine::GateCallback::onUnlocked() noexcept {
-    std::unique_lock<std::mutex> lock{sharedDataMutex};
-
-    switch (gateType) {
-        case GateType::IgnitionGate:
-            sharedData.ignitionGateUnlockedFlag = true;
-            break;
-        case GateType::IntermediateGate:
-            sharedData.intermediateGateUnlockedFlags[gateIndex.value()] = true;
-            break;
-    }
-    sharedDataCv.notify_one();
-}
-
-/*-----------------------------------------------------------------------------
-    Implementation
------------------------------------------------------------------------------*/
-
-inline ExecutionLine::ExecutionLine(Gate& ignitionGate):
-    ignitionGate_{ignitionGate},
-    ignitionGateCallback_{
-        GateType::IgnitionGate,
-        std::nullopt,
-        sharedData_,
-        sharedDataCv_,
-        sharedDataMutex_
-    }
+inline ExecutionLine::ExecutionLine(CreationParams const& params):
+    lineElements_{params.lineElements}
 {
-    ignitionGate.registerCallback(this->ignitionGateCallback_);
-    ignitionGate.incrementLockCountAndMax();
-}
+    std::size_t gateIndex = 0;
 
-inline ExecutionLine::ExecutionLine(Gate& ignitionGate, Callback& cb):
-    ignitionGate_{ignitionGate},
-    ignitionGateCallback_{
-        GateType::IgnitionGate,
-        std::nullopt,
-        sharedData_,
-        sharedDataCv_,
-        sharedDataMutex_
-    },
-    callback_{&cb}
-{
-    ignitionGate.registerCallback(this->ignitionGateCallback_);
-    ignitionGate.incrementLockCountAndMax();
+    for (auto& e : params.lineElements) {
+        if (auto* const refGate = std::get_if<std::reference_wrapper<Gate>>(&e)) {
+            this->gateEventHandlers_.push_back(
+                GateEventHandler{
+                    gateIndex,
+                    this->sharedData_,
+                    this->sharedDataCv_,
+                    this->sharedDataMutex_
+                }
+            );
+            refGate->get().connectToLine(
+                this->gateEventHandlers_.back()
+            );
+            gateIndex++;
+        }
+    }
 }
 
 inline ExecutionLine::~ExecutionLine() noexcept {
     this->destroy();
 }
 
-inline void ExecutionLine::setCallback(Callback& cb) {
-    this->callback_ = &cb;
-}
-
-inline void ExecutionLine::addExecutionUnit(ExecutionUnit& executionUnit) {
-    this->lineElements_.push_back(
-        &executionUnit
-    );
-}
-
-inline void ExecutionLine::addGate(Gate& intermediateGate) {
-    this->lineElements_.push_back(
-        &intermediateGate
-    );
-    this->intermediateGateCallbacks_.push_back(
-        GateCallback{
-            GateType::IntermediateGate,
-            std::make_optional(this->intermediateGateCallbacks_.size()),
-            this->sharedData_,
-            this->sharedDataCv_,
-            this->sharedDataMutex_
-        }
-    );
-    intermediateGate.registerCallback(this->intermediateGateCallbacks_.back());
-    intermediateGate.incrementLockCountAndMax();
-}
-
-inline void ExecutionLine::buildOn(void* ctx) {
+inline void ExecutionLine::start(void* ctx) {
     this->thread_ = std::thread{[this, ctx]() {
-        /* wait for starting... */
-        {
-            std::unique_lock<std::mutex> lock{this->sharedDataMutex_};
-
-            this->sharedDataCv_.wait(lock, [this] { 
-                return (
-                    this->sharedData_.shutdownFlag ||
-                    this->sharedData_.ignitionGateUnlockedFlag
-                );
-            });
-            if (this->sharedData_.shutdownFlag)
-                return;
-        }
         /* start */
-        try {
-            if (this->callback_)
-                this->callback_->onStart(ctx);
-        }
-        catch (...) {
-            if (this->callback_) {
-                this->callback_->onError(ctx, std::current_exception());
-                this->callback_->onFinished(ctx);
+        if (this->callback_) {
+            try {
+                this->callback_->onLineStart(ctx);
             }
-            return;
+            catch (...) {
+                this->callback_->onFatalError(ctx, std::current_exception());
+                this->callback_->onLineEnd(ctx);
+                return;
+            }
         }
         /* steady state */
         while (true) {
-            std::size_t intermediateGateCursor = 0;
-            bool        shutdownFlag           = false;
+            std::size_t gateCursor   = 0;
+            bool        shutdownFlag = false;
 
             for (auto& e : this->lineElements_) {
-                if (std::holds_alternative<ExecutionUnit*>(e)) {
-                    /* lock area */
+                auto* const refExecutionUnit = std::get_if<std::reference_wrapper<ExecutionUnit>>(&e);
+                auto* const refGate          = std::get_if<std::reference_wrapper<Gate>>(&e);
+
+                if (refExecutionUnit) {
                     {
                         std::unique_lock<std::mutex> lock{this->sharedDataMutex_};
-
-                        if (this->sharedData_.shutdownFlag)
-                            shutdownFlag = true;
+                        shutdownFlag = this->sharedData_.shutdownFlag;
                     }
                     if (shutdownFlag) {
                         if (this->callback_)
-                            this->callback_->onFinished(ctx);
+                            this->callback_->onLineEnd(ctx);
                         return;
                     }
                     try {
-                        std::get<ExecutionUnit*>(e)->run(ctx);
+                        refExecutionUnit->get().run(ctx);
                     }
                     catch (...) {
                         if (this->callback_) {
-                            this->callback_->onExecutionError(ctx, *std::get<ExecutionUnit*>(e), std::current_exception());
-                            this->callback_->onFinished(ctx);
+                            this->callback_->onExecutionUnitError(
+                                ctx,
+                                refExecutionUnit->get(),
+                                std::current_exception()
+                            );
+                            this->callback_->onLineEnd(ctx);
                         }
                         return;
                     }
                 }
-                if (std::holds_alternative<Gate*>(e)) {
-                    std::get<Gate*>(e)->decrementLockCount();
-                    /* lock area */
+                if (refGate) {
+                    refGate->get().requestUnlock();
                     {
                         std::unique_lock<std::mutex> lock{this->sharedDataMutex_};
-
-                        this->sharedDataCv_.wait(lock, [this, intermediateGateCursor] {
+                        this->sharedDataCv_.wait(lock, [this, gateCursor] {
                             return (
                                 this->sharedData_.shutdownFlag ||
-                                this->sharedData_.intermediateGateUnlockedFlags[intermediateGateCursor]
+                                this->sharedData_.gateUnlockedFlags[gateCursor]
                             );
                         });
                         if (this->sharedData_.shutdownFlag)
                             shutdownFlag = true;
                         else
-                            this->sharedData_.intermediateGateUnlockedFlags[intermediateGateCursor] = false;
+                            this->sharedData_.gateUnlockedFlags[gateCursor] = false;
                     }
                     if (shutdownFlag) {
                         if (this->callback_)
-                            this->callback_->onFinished(ctx);
+                            this->callback_->onLineEnd(ctx);
                         return;
                     }
-                    intermediateGateCursor++;
+                    gateCursor++;
                 }
             }
         }
     }};
 }
+
+inline void ExecutionLine::start(void* ctx, ExecutionLineCallback& callback) {
+    this->callback_ = &callback;
+    this->start(ctx);
+}
+
 
 inline void ExecutionLine::destroy() noexcept {
     if (this->thread_.joinable()) {
