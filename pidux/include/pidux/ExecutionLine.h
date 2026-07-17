@@ -32,6 +32,7 @@ public:
             ExecutionLine::Element,
             ExecutionLine::ElementMaxCount
         > lineElements;
+        ExecutionLineCallback* callback{nullptr};
     };
 public:
     explicit ExecutionLine(CreationParams const& params);
@@ -43,7 +44,6 @@ public:
     ExecutionLine& operator=(ExecutionLine&&) noexcept = delete;
 
     void start(void* ctx);
-    void start(void* ctx, ExecutionLineCallback& callback);
     void destroy() noexcept;
 
 private:
@@ -56,7 +56,7 @@ private:
     std::condition_variable sharedDataCv_;
     std::mutex              sharedDataMutex_;
 
-    class GateEventHandler final : public Gate::Callback {
+    class GateEventHandler final : public GateCallback {
     public:
         explicit GateEventHandler(
             std::size_t              gateIndex,
@@ -93,7 +93,8 @@ private:
 -----------------------------------------------------------------------------*/
 
 inline ExecutionLine::ExecutionLine(CreationParams const& params):
-    lineElements_{params.lineElements}
+    lineElements_{params.lineElements},
+    callback_{params.callback}
 {
     std::size_t gateIndex = 0;
 
@@ -107,7 +108,7 @@ inline ExecutionLine::ExecutionLine(CreationParams const& params):
                     this->sharedDataMutex_
                 }
             );
-            refGate->get().connectToLine(
+            refGate->get().addLockDependency(
                 this->gateEventHandlers_.back()
             );
             gateIndex++;
@@ -199,12 +200,6 @@ inline void ExecutionLine::start(void* ctx) {
     }};
 }
 
-inline void ExecutionLine::start(void* ctx, ExecutionLineCallback& callback) {
-    this->callback_ = &callback;
-    this->start(ctx);
-}
-
-
 inline void ExecutionLine::destroy() noexcept {
     if (this->thread_.joinable()) {
         {
@@ -213,6 +208,17 @@ inline void ExecutionLine::destroy() noexcept {
             this->sharedDataCv_.notify_one();
         }
         this->thread_.join();
+
+        std::size_t gateIndex = 0;
+
+        for (auto& e : this->lineElements_) {
+            if (auto* const refGate = std::get_if<std::reference_wrapper<Gate>>(&e)) {
+                refGate->get().removeLockDependency(
+                    this->gateEventHandlers_[gateIndex]
+                );
+                gateIndex++;
+            }
+        }
     }
 }
 

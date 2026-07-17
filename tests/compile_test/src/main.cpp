@@ -32,14 +32,21 @@ class TestExecutionLineCallback final : public pidux::ExecutionLineCallback {
 public:
     explicit TestExecutionLineCallback(char const* lineName):
         lineName_{lineName}
-    {}
+    {
+        std::cout << "constructed...callback for " << this->lineName_ << std::endl;
+    }
+    ~TestExecutionLineCallback() noexcept {
+        std::cout << "destructed...callback for " << this->lineName_ << std::endl;
+    }
     void onLineStart(void* ctx) override {
         std::cout
-            << "line '" << this->lineName_ << "' start" << std::endl;
+            << "line '" << this->lineName_ << "' start" << std::endl
+            << std::flush;
     }
     void onLineEnd(void* ctx) noexcept override {
         std::cout
-            << "line '" << this->lineName_ << "' end" << std::endl;
+            << "line '" << this->lineName_ << "' end" << std::endl
+            << std::flush;
     }
     void onFatalError(void* ctx, std::exception_ptr error) noexcept {
         try {
@@ -59,13 +66,15 @@ public:
         std::cout
             << "ExecutionUnit...'"
             << typeid(executionUnit).name()
-            << "' start" << std::endl;
+            << "' start" << std::endl
+            << std::flush;
     }
     void onExecutionUnitEnd(void* ctx, pidux::ExecutionUnit& executionUnit) {
         std::cout
             << "ExecutionUnit...'"
             << typeid(executionUnit).name()
-            << "' end" << std::endl;
+            << "' end" << std::endl
+            << std::flush;
     }
     void onExecutionUnitError(
         void* ctx,
@@ -111,23 +120,34 @@ int main() {
         std::this_thread::sleep_for(sleepTime);
     });
     pidux::Gate syncGate{};
+    {
+        Context ctx{};        
+        TestExecutionLineCallback line1Callback{"Line1"};
+        TestExecutionLineCallback line2Callback{"Line2"};
+        /*
+            Line1: ---A---|---B---
+            Line2: -------|---C---
+        */
+        pidux::ExecutionLine::CreationParams const line1CreationParams{
+            {unitA, syncGate, unitB},
+            &line1Callback
+        };
+        pidux::ExecutionLine::CreationParams const line2CreationParams{
+            {syncGate, unitC},
+            &line2Callback
+        };
+        pidux::ExecutionLine line1{line1CreationParams};
+        pidux::ExecutionLine line2{line2CreationParams};
 
-    auto line1CreationParams = pidux::ExecutionLine::CreationParams{
-        {unitA, syncGate, unitB}
-    };
-    auto line2CreationParams = pidux::ExecutionLine::CreationParams{
-        {syncGate, unitC}
-    };
-    pidux::ExecutionLine line1{line1CreationParams};
-    pidux::ExecutionLine line2{line2CreationParams};
+        line1.start(&ctx);
+        line2.start(&ctx);
 
-    Context ctx{};
-    TestExecutionLineCallback line1Callback{"Line1"};
-    TestExecutionLineCallback line2Callback{"Line2"};
+        std::this_thread::sleep_for(std::chrono::seconds{5});
 
-    line1.start(&ctx, line1Callback);
-    line2.start(&ctx, line2Callback);
+        //line1.destroy();
+        //line2.destroy();
+    }
+    std::this_thread::sleep_for(std::chrono::seconds{1});
 
-    std::this_thread::sleep_for(std::chrono::seconds{5});
     return 0;
 }
