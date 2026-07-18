@@ -3,7 +3,6 @@
 #pragma once
 #include "./ExecutionUnit.h"
 
-
 namespace pidux {
 
 template<typename T, typename F>
@@ -29,9 +28,9 @@ template<typename T, typename F>
 ExecutionUnitAdaptor<T, F> createExecutionUnit(F f) {
     static_assert(
         std::is_invocable_v<F, T&>,
-        "Error: lambda must be callable with an T&"
+        "Error: lambda must be callable with T&"
     );
-    return ExecutionUnitAdaptor<T, F>(f);
+    return ExecutionUnitAdaptor<T, F>{f};
 }
 
 } /* namespace pidux */
