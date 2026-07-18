@@ -60,12 +60,11 @@ inline void SyncGate::removeLockDependency(SyncGateCallback& callback) {
         assert(static_cast<unsigned int>(removeCount) <= this->sharedData_.lockCount);
         assert(static_cast<unsigned int>(removeCount) <= this->sharedData_.lockCountMax);
 
-        if (removeCount == 0)
-            return;
-
-        this->sharedData_.lockCount -= removeCount;
-        this->sharedData_.lockCountMax -= removeCount;
-        this->sharedData_.callbacks.erase(newEnd, this->sharedData_.callbacks.end());
+        if (removeCount > 0) {
+            this->sharedData_.callbacks.erase(newEnd, this->sharedData_.callbacks.end());
+            this->sharedData_.lockCount -= static_cast<unsigned int>(removeCount);
+            this->sharedData_.lockCountMax -= static_cast<unsigned int>(removeCount);
+        }
 
         if (this->sharedData_.lockCount == 0) {
             this->sharedData_.lockCount = this->sharedData_.lockCountMax;
@@ -75,8 +74,8 @@ inline void SyncGate::removeLockDependency(SyncGateCallback& callback) {
         }
     }
     if (unlocked)
-        for (auto* const callback : callbacks)
-            callback->onUnlocked();
+        for (auto* const cb : callbacks)
+            cb->onUnlocked();
 }
 
 inline void SyncGate::requestUnlock() noexcept {
