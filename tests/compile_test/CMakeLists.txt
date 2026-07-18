@@ -10,3 +10,7 @@ FetchContent_MakeAvailable(lib_pidux)
 
 add_executable(compile_test ./src/main.cpp)
 target_link_libraries(compile_test PRIVATE pidux)
+
+if (MSVC)
+    target_compile_options(compile_test PRIVATE /W4 /WX)
+endif()

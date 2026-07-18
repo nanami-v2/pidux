@@ -38,17 +38,17 @@ public:
     ~TestExecutionLineCallback() noexcept {
         std::cout << "destructed...callback for " << this->lineName_ << std::endl;
     }
-    void onLineStart(TestContext& ctx) override {
+    void onLineStart([[maybe_unused]] TestContext& ctx) override {
         std::cout
             << "line '" << this->lineName_ << "' start" << std::endl
             << std::flush;
     }
-    void onLineEnd(TestContext& ctx) noexcept override {
+    void onLineEnd([[maybe_unused]] TestContext& ctx) noexcept override {
         std::cout
             << "line '" << this->lineName_ << "' end" << std::endl
             << std::flush;
     }
-    void onFatalError(TestContext& ctx, std::exception_ptr error) noexcept {
+    void onFatalError([[maybe_unused]] TestContext& ctx, std::exception_ptr error) noexcept {
         try {
             std::rethrow_exception(error);
         }
@@ -61,15 +61,19 @@ public:
                 << "[FATAL] unknown error" << std::endl;
         }
     }
-    void onSyncGateUnlocked(TestContext& ctx, pidux::SyncGate& syncGate) {}
-    void onExecutionUnitStart(TestContext& ctx, pidux::ExecutionUnit<TestContext>& executionUnit) {
+    void onSyncGateUnlocked(
+        [[maybe_unused]] TestContext& ctx,
+        [[maybe_unused]] pidux::SyncGate& syncGate
+    ) {
+    }
+    void onExecutionUnitStart([[maybe_unused]] TestContext& ctx, pidux::ExecutionUnit<TestContext>& executionUnit) {
         std::cout
             << "ExecutionUnit...'"
             << typeid(executionUnit).name()
             << "' start" << std::endl
             << std::flush;
     }
-    void onExecutionUnitEnd(TestContext& ctx, pidux::ExecutionUnit<TestContext>& executionUnit) {
+    void onExecutionUnitEnd([[maybe_unused]] TestContext& ctx, pidux::ExecutionUnit<TestContext>& executionUnit) {
         std::cout
             << "ExecutionUnit...'"
             << typeid(executionUnit).name()
@@ -77,7 +81,7 @@ public:
             << std::flush;
     }
     void onExecutionUnitError(
-        TestContext& ctx,
+        [[maybe_unused]] TestContext& ctx,
         pidux::ExecutionUnit<TestContext>& executionUnit,
         std::exception_ptr executionUnitError
     ) noexcept {
