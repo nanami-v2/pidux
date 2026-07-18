@@ -7,7 +7,6 @@ namespace pidux {
 class SyncGateCallback {
 public:
     virtual ~SyncGateCallback() noexcept = default;
-    virtual void onLocked() = 0;
     virtual void onUnlocked() = 0;
 };
 

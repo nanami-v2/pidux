@@ -50,7 +50,6 @@ inline void SyncGate::addLockDependency(SyncGateCallback& callback) {
 
 inline void SyncGate::removeLockDependency(SyncGateCallback& callback) {
     bool unlocked = false;
-    bool locked = false;
     boost::container::static_vector<SyncGateCallback*, CallbackMaxCount> callbacks;
     {
         std::unique_lock<std::mutex> const lock{this->sharedDataMutex_};
@@ -72,22 +71,16 @@ inline void SyncGate::removeLockDependency(SyncGateCallback& callback) {
             this->sharedData_.lockCount = this->sharedData_.lockCountMax;
 
             unlocked = true;
-            locked = true;
             callbacks = this->sharedData_.callbacks;
         }
     }
     if (unlocked)
         for (auto* const callback : callbacks)
             callback->onUnlocked();
-
-    if (locked)
-        for (auto* const callback : callbacks)
-            callback->onLocked();
 }
 
 inline void SyncGate::requestUnlock() noexcept {
     bool unlocked = false;
-    bool locked = false;
     boost::container::static_vector<SyncGateCallback*, CallbackMaxCount> callbacks;
     {
         std::unique_lock<std::mutex> lock{this->sharedDataMutex_};
@@ -98,17 +91,12 @@ inline void SyncGate::requestUnlock() noexcept {
             this->sharedData_.lockCount = this->sharedData_.lockCountMax;
 
             unlocked = true;
-            locked = true;
             callbacks = this->sharedData_.callbacks;
         }
     }
     if (unlocked)
         for (auto* const callback : callbacks)
             callback->onUnlocked();
-
-    if (locked)
-        for (auto* const callback : callbacks)
-            callback->onLocked();
 }
 
 } /* namespace pidux */

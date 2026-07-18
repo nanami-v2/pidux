@@ -70,7 +70,6 @@ private:
             sharedDataCv{sharedDataCv},
             sharedDataMutex{sharedDataMutex}
         {}
-        void onLocked() override {};
         void onUnlocked() override {
             std::unique_lock<std::mutex> lock{sharedDataMutex};
 
