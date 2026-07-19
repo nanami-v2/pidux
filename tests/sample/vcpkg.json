@@ -1,5 +1,6 @@
 {
   "dependencies": [
-    "pidux"
+    "pidux",
+    "boost-circular-buffer"
   ]
 }
