@@ -12,7 +12,7 @@ struct TestContext {
     int randBase{500};
 };
 
-class TestExecutionUnit final : public pidux::ExecutionUnit<TestContext> {
+class TestExecutionUnit final: public pidux::ExecutionUnit<TestContext> {
 public:
     explicit TestExecutionUnit(char const* unitName):
         unitName_{unitName}
@@ -28,7 +28,7 @@ private:
     std::string unitName_;
 };
 
-class TestExecutionLineCallback final : public pidux::ExecutionLineCallback<TestContext> {
+class TestExecutionLineCallback final: public pidux::ExecutionLineCallback<TestContext> {
 public:
     explicit TestExecutionLineCallback(char const* lineName):
         lineName_{lineName}
@@ -146,14 +146,26 @@ int main() {
         TestExecutionLine line1{line1CreationParams};
         TestExecutionLine line2{line2CreationParams};
 
+        std::cout
+            << "LockDependencyCount of syncGate (all)..."
+            << syncGate.lockDependencyCount() << std::endl;
+
         line1.start(ctx);
         line2.start(ctx);
 
         std::this_thread::sleep_for(std::chrono::seconds{5});
 
-        //line1.destroy();
+        line1.destroy();
+
+        std::cout
+            << "LockDependencyCount of syncGate (after line1 destroeyd)..."
+            << syncGate.lockDependencyCount() << std::endl;
         //line2.destroy();
     }
+    std::cout
+        << "LockDependencyCount of syncGate (after all destroeyd)..."
+        << syncGate.lockDependencyCount() << std::endl;
+
     std::this_thread::sleep_for(std::chrono::seconds{1});
 
     return 0;

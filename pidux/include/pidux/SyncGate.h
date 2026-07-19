@@ -28,6 +28,7 @@ public:
     void requestUnlock(
         unsigned int lockDependencyId
     ) noexcept;
+    std::size_t lockDependencyCount() const noexcept;
 private:
     struct SharedData {
         boost::container::static_vector<
@@ -47,7 +48,7 @@ private:
         unsigned int lockDependencyLatestId{0};
     };
     SharedData sharedData_;
-    std::mutex sharedDataMutex_;
+    mutable std::mutex sharedDataMutex_;
 };
 
 /*-----------------------------------------------------------------------------
@@ -108,8 +109,8 @@ inline void SyncGate::removeLockDependency(unsigned int lockDependencyId) {
         }
     }
     if (unlocked)
-        for (auto& e : lockDependencyCallbacks)
-            e.onUnlocked();
+        for (auto& callback : lockDependencyCallbacks)
+            callback.onUnlocked();
 }
 
 inline void SyncGate::requestUnlock(unsigned int lockDependencyId) noexcept {
@@ -152,8 +153,14 @@ inline void SyncGate::requestUnlock(unsigned int lockDependencyId) noexcept {
         }
     }
     if (unlocked)
-        for (auto& e : lockDependencyCallbacks)
-            e.onUnlocked();
+        for (auto& callback : lockDependencyCallbacks)
+            callback.onUnlocked();
+}
+
+std::size_t SyncGate::lockDependencyCount() const noexcept {
+    std::unique_lock<std::mutex> lock{this->sharedDataMutex_};
+
+    return this->sharedData_.lockDependencyCount;
 }
 
 } /* namespace pidux */
