@@ -12,12 +12,10 @@
 #include "./SyncGate.h"
 #include "./ExecutionUnit.h"
 #include "./ExecutionLineCallback.h"
+#include "./detail/ExecutionLineSharedData.h"
+#include "./detail/SyncGateLockDependencyCallback.h"
 
 namespace pidux {
-
-#ifndef PIDUX_EXECUTION_LINE_ELEMENT_MAX_COUNT
-#define PIDUX_EXECUTION_LINE_ELEMENT_MAX_COUNT 64
-#endif
 
 template<typename T>
 class ExecutionLine {
@@ -26,12 +24,10 @@ public:
         std::reference_wrapper<ExecutionUnit<T>>,
         std::reference_wrapper<SyncGate>
     >;
-    static constexpr std::size_t ElementMaxCount = PIDUX_EXECUTION_LINE_ELEMENT_MAX_COUNT;
-
     struct CreationParams {
         boost::container::static_vector<
             ExecutionLine::Element,
-            ExecutionLine::ElementMaxCount
+            detail::ExecutionLineElementMaxCount
         > lineElements;
         ExecutionLineCallback<T>* callback{nullptr};
     };
@@ -48,45 +44,19 @@ public:
     void destroy() noexcept;
 
 private:
-    struct SharedData {
-        bool                         shutdownFlag{false};
-        std::bitset<ElementMaxCount> syncGateUnlockedFlags{};
-    };
-    std::thread             thread_;
-    SharedData              sharedData_;
-    std::condition_variable sharedDataCv_;
-    std::mutex              sharedDataMutex_;
+    std::thread thread_;
+    std::shared_ptr<detail::ExecutionLineSharedData> sharedData_;
 
-    class SyncGateEventHandler final : public SyncGateCallback {
-    public:
-        explicit SyncGateEventHandler(
-            std::size_t              syncGateIndex,
-            SharedData&              sharedData,
-            std::condition_variable& sharedDataCv,
-            std::mutex&              sharedDataMutex
-        ):
-            syncGateIndex{syncGateIndex},
-            sharedData{sharedData},
-            sharedDataCv{sharedDataCv},
-            sharedDataMutex{sharedDataMutex}
-        {}
-        void onLocked() override {};
-        void onUnlocked() override {
-            std::unique_lock<std::mutex> lock{sharedDataMutex};
-
-            sharedData.syncGateUnlockedFlags[syncGateIndex] = true;
-            sharedDataCv.notify_one();   
-        }
-    private:
-        std::size_t              syncGateIndex;
-        SharedData&              sharedData;
-        std::condition_variable& sharedDataCv;
-        std::mutex&              sharedDataMutex;
-    };
-    
-    boost::container::static_vector<SyncGateEventHandler, ElementMaxCount> syncGateEventHandlers_;
-    boost::container::static_vector<Element, ElementMaxCount> lineElements_;
-    ExecutionLineCallback<T>* callback_{nullptr};
+    boost::container::static_vector<
+        unsigned int,
+        detail::ExecutionLineElementMaxCount
+    > syncGateLockDependencyIds_;
+    boost::container::static_vector<
+        Element,
+        detail::ExecutionLineElementMaxCount
+    > lineElements_;
+    ExecutionLineCallback<T>* callback_;
+    bool destroyed_;
 };
 
 /*-----------------------------------------------------------------------------
@@ -96,22 +66,21 @@ private:
 template<typename T>
 inline ExecutionLine<T>::ExecutionLine(CreationParams const& params):
     lineElements_{params.lineElements},
-    callback_{params.callback}
+    callback_{params.callback},
+    sharedData_{std::make_shared<detail::ExecutionLineSharedData>()},
+    destroyed_{false}
 {
     std::size_t syncGateIndex = 0;
 
-    for (auto& e : params.lineElements) {
-        if (auto* const refSyncGate = std::get_if<std::reference_wrapper<SyncGate>>(&e)) {
-            this->syncGateEventHandlers_.push_back(
-                SyncGateEventHandler{
-                    syncGateIndex,
-                    this->sharedData_,
-                    this->sharedDataCv_,
-                    this->sharedDataMutex_
-                }
-            );
-            refSyncGate->get().addLockDependency(
-                this->syncGateEventHandlers_.back()
+    for (auto& e : this->lineElements_) {
+        if (auto* const syncGate = std::get_if<std::reference_wrapper<SyncGate>>(&e)) {
+            this->syncGateLockDependencyIds_.push_back(
+                syncGate->get().addLockDependency(
+                    detail::SyncGateLockDependencyCallback{
+                        syncGateIndex,
+                        this->sharedData_
+                    }
+                )
             );
             syncGateIndex++;
         }
@@ -125,23 +94,25 @@ inline ExecutionLine<T>::~ExecutionLine() noexcept {
 
 template<typename T>
 inline void ExecutionLine<T>::start(T& ctx) {
+    assert(!this->destroyed_);
+    
     this->thread_ = std::thread{[this, &ctx]() {
         try {
             if (this->callback_)
                 this->callback_->onLineStart(ctx);
 
             while (true) {
-                std::size_t gateCursor   = 0;
+                std::size_t syncGateIndex = 0;
                 bool        shutdownFlag = false;
 
                 for (auto& e : this->lineElements_) {
-                    auto* const refExecutionUnit = std::get_if<std::reference_wrapper<ExecutionUnit<T>>>(&e);
-                    auto* const refSyncGate = std::get_if<std::reference_wrapper<SyncGate>>(&e);
+                    auto* const executionUnit = std::get_if<std::reference_wrapper<ExecutionUnit<T>>>(&e);
+                    auto* const syncGate = std::get_if<std::reference_wrapper<SyncGate>>(&e);
 
-                    if (refExecutionUnit) {
+                    if (executionUnit) {
                         {
-                            std::unique_lock<std::mutex> lock{this->sharedDataMutex_};
-                            shutdownFlag = this->sharedData_.shutdownFlag;
+                            std::unique_lock<std::mutex> lock{this->sharedData_->mutex};
+                            shutdownFlag = this->sharedData_->shutdownFlag;
                         }
                         if (shutdownFlag) {
                             if (this->callback_)
@@ -151,35 +122,38 @@ inline void ExecutionLine<T>::start(T& ctx) {
                         }
                         try {
                             if (this->callback_)
-                                this->callback_->onExecutionUnitStart(ctx, refExecutionUnit->get());
+                                this->callback_->onExecutionUnitStart(ctx, executionUnit->get());
 
-                            refExecutionUnit->get().run(ctx);
+                            executionUnit->get().run(ctx);
 
                             if (this->callback_)
-                                this->callback_->onExecutionUnitEnd(ctx, refExecutionUnit->get());
+                                this->callback_->onExecutionUnitEnd(ctx, executionUnit->get());
                         }
                         catch (...) {
                             if (this->callback_) {
-                                this->callback_->onExecutionUnitError(ctx, refExecutionUnit->get(), std::current_exception());
+                                this->callback_->onExecutionUnitError(ctx, executionUnit->get(), std::current_exception());
                                 this->callback_->onLineEnd(ctx);
                             }
                             return;
                         }
                     }
-                    if (refSyncGate) {
-                        refSyncGate->get().requestUnlock();
+                    if (syncGate) {
+                        syncGate->get().requestUnlock(
+                            this->syncGateLockDependencyIds_[syncGateIndex]
+                        );
                         {
-                            std::unique_lock<std::mutex> lock{this->sharedDataMutex_};
-                            this->sharedDataCv_.wait(lock, [this, gateCursor] {
+                            std::unique_lock<std::mutex> lock{this->sharedData_->mutex};
+
+                            this->sharedData_->cv.wait(lock, [this, syncGateIndex] {
                                 return (
-                                    this->sharedData_.shutdownFlag ||
-                                    this->sharedData_.syncGateUnlockedFlags[gateCursor]
+                                    this->sharedData_->shutdownFlag ||
+                                    this->sharedData_->syncGateUnlockedFlags[syncGateIndex]
                                 );
                             });
-                            if (this->sharedData_.shutdownFlag)
+                            if (this->sharedData_->shutdownFlag)
                                 shutdownFlag = true;
                             else
-                                this->sharedData_.syncGateUnlockedFlags[gateCursor] = false;
+                                this->sharedData_->syncGateUnlockedFlags[syncGateIndex] = false;
                         }
                         if (shutdownFlag) {
                             if (this->callback_)
@@ -188,9 +162,9 @@ inline void ExecutionLine<T>::start(T& ctx) {
                             return;
                         }
                         if (this->callback_)
-                            this->callback_->onSyncGateUnlocked(ctx, refSyncGate->get());
+                            this->callback_->onSyncGateUnlocked(ctx, syncGate->get());
 
-                        gateCursor++;
+                        syncGateIndex++;
                     }
                 }
             }
@@ -208,22 +182,27 @@ template<typename T>
 inline void ExecutionLine<T>::destroy() noexcept {
     if (this->thread_.joinable()) {
         {
-            std::unique_lock<std::mutex> lock{this->sharedDataMutex_};
-            this->sharedData_.shutdownFlag = true;
-            this->sharedDataCv_.notify_one();
+            std::unique_lock<std::mutex> lock{this->sharedData_->mutex};
+            this->sharedData_->shutdownFlag = true;
+            this->sharedData_->cv.notify_one();
         }
         this->thread_.join();
+        this->sharedData_ = nullptr;
 
         std::size_t syncGateIndex = 0;
 
         for (auto& e : this->lineElements_) {
-            if (auto* const refSyncGate = std::get_if<std::reference_wrapper<SyncGate>>(&e)) {
-                refSyncGate->get().removeLockDependency(
-                    this->syncGateEventHandlers_[syncGateIndex]
+            if (auto* const syncGate = std::get_if<std::reference_wrapper<SyncGate>>(&e)) {
+                syncGate->get().removeLockDependency(
+                    this->syncGateLockDependencyIds_[syncGateIndex]
                 );
                 syncGateIndex++;
             }
         }
+        this->syncGateLockDependencyIds_.clear();
+        this->lineElements_.clear();
+        this->callback_ = nullptr;
+        this->destroyed_ = true;
     }
 }
 
