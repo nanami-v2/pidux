@@ -148,8 +148,9 @@ inline void SyncGate::requestUnlock(unsigned int lockDependencyId) noexcept {
 }
 
 inline std::size_t SyncGate::lockDependencyCount() const noexcept {
-    std::unique_lock<std::mutex> lock{this->sharedDataMutex_};
-
+    std::unique_lock<std::mutex> lock{
+        this->sharedDataMutex_
+    };
     return this->sharedData_.lockDependencyCount;
 }
 
