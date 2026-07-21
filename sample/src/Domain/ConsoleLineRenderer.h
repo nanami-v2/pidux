@@ -3,6 +3,8 @@
 #include <iostream>
 #include "./ConsoleLineBuffers.h"
 
+namespace sample {
+
 class ConsoleLineRenderer {
 public:
     //void render(std::ostream& out, ConsoleLineBuffers<char> const& lineBuffers){
@@ -10,3 +12,5 @@ public:
     //        out << "\x1b[2K\r" << 
     //}
 };
+
+} /* namespace sample */

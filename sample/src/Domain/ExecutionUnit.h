@@ -3,6 +3,8 @@
 #include <pidux.h>
 #include "./AppContext.h"
 
+namespace sample {
+
 class ExecutionUnit final: public pidux::ExecutionUnit<AppContext> {
 public:
     explicit ExecutionUnit(unsigned int lineNo, unsigned int unitId):
@@ -32,3 +34,5 @@ private:
     bool uniformDistributionUninitialized_{true};
     std::uniform_int_distribution<std::chrono::milliseconds::rep> uniformDistribution_;
 };
+
+} /* namespace sample */

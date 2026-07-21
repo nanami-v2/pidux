@@ -6,6 +6,8 @@
 #include <boost/circular_buffer.hpp>
 #include "./ExecutionLineEvent.h"
 
+namespace sample {
+
 class ExecutionLineEventQueue {
 public:
     class Callback {
@@ -67,3 +69,5 @@ private:
     std::mutex queueMutex_;
     Callback* callback_{nullptr};
 };
+
+} /* namespace sample */

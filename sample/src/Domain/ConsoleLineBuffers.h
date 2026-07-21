@@ -3,6 +3,8 @@
 #include <boost/circular_buffer.hpp>
 #include <vector>
 
+namespace sample {
+
 template<typename T>
 class ConsoleLineBuffers {
     explicit ConsoleLineBuffers(std::size_t lineCount, std::size_t lineBufferCapacity):
@@ -38,3 +40,5 @@ private:
     std::size_t lineBufferCapacity_;
     std::vector<boost::circular_buffer<T>> lineBuffers_;
 };
+
+} /* namespace sample */

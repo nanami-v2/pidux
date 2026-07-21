@@ -1,7 +1,15 @@
 
 #pragma once
+#include <thread>
 #include "./ExecutionLineEventQueue.h"
 
-class ExecutionLineEventQueueger final: public ExecutionLineEventQueue::Callback {
+namespace sample {
+
+class ExecutionLineEventLogger final: public ExecutionLineEventQueue::Callback {
 public:
+private:
+    std::thread threaed_;
+
 };
+
+} /* namespace sample */

@@ -7,6 +7,8 @@
 #include "./AppConfig.h"
 #include "./ExecutionLineEventQueue.h"
 
+namespace sample {
+
 struct AppContext {
     struct alignas(std::hardware_destructive_interference_size) RandEngineBucket {
         std::default_random_engine engine;
@@ -15,3 +17,5 @@ struct AppContext {
     ExecutionLineEventQueue eventQueue;
     std::vector<RandEngineBucket> randEngineBuckets;
 };
+
+} /* namespace sample */

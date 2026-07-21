@@ -3,6 +3,8 @@
 #include <variant>
 #include <chrono>
 
+namespace sample {
+
 namespace ExecutionLineEventType {
     struct UnitExecuted {
         unsigned int lineNo;
@@ -16,3 +18,5 @@ namespace ExecutionLineEventType {
 using ExecutionLineEvent = std::variant<
     ExecutionLineEventType::UnitExecuted
 >;
+
+} /* namespace sample */
