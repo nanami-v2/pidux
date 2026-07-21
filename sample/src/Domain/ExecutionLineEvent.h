@@ -5,7 +5,7 @@
 
 namespace ExecutionLineEventType {
     struct UnitExecuted {
-        unsigned int lineId;
+        unsigned int lineNo;
         unsigned int unitId;
         std::chrono::system_clock::time_point startTime;
         std::chrono::system_clock::time_point endTime;

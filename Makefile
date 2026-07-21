@@ -28,7 +28,7 @@ package-test:
 .PHONY: sample
 sample:
 	cmake \
-		-S tests/sample \
+		-S sample \
 		-B $(build_dir)/sample \
 		-DCMAKE_TOOLCHAIN_FILE="$(VCPKG_ROOT)\scripts\buildsystems\vcpkg.cmake" \
 		-DVCPKG_OVERLAY_PORTS="pidux-overlay-ports"
