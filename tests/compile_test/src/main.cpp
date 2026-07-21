@@ -48,7 +48,7 @@ public:
             << "line '" << this->lineName_ << "' end" << std::endl
             << std::flush;
     }
-    void onFatalError([[maybe_unused]] TestContext& ctx, std::exception_ptr error) noexcept {
+    void onCriticalError([[maybe_unused]] TestContext& ctx, std::exception_ptr error) noexcept {
         try {
             std::rethrow_exception(error);
         }

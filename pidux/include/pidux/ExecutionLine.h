@@ -181,7 +181,7 @@ inline void ExecutionLine<T>::start(T& ctx) {
         }
         catch (...) {
             if (this->callback_) {
-                this->callback_->onFatalError(ctx, std::current_exception());
+                this->callback_->onCriticalError(ctx, std::current_exception());
                 this->callback_->onLineEnd(ctx);
             }
         }
