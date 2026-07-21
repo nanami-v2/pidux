@@ -11,7 +11,6 @@
 #include "./SyncGate.h"
 #include "./ExecutionUnit.h"
 #include "./ExecutionLineCallback.h"
-#include "./ExecutionPolicy.h"
 #include "./detail/ExecutionLineSharedData.h"
 #include "./detail/ExecutionLineSyncGateCallback.h"
 
@@ -25,7 +24,6 @@ public:
         std::reference_wrapper<SyncGate>
     >;
     struct CreationParams {
-        ExecutionPolicy executionPolicy;
         boost::container::static_vector<
             LineElement,
             ExecutionLineElementMaxCount
@@ -62,7 +60,6 @@ private:
         LineElement,
         ExecutionLineElementMaxCount
     > lineElements_;
-    ExecutionPolicy executionPolicy_;
     ExecutionLineCallback<T>* callback_;
     bool destroyed_;
 };
@@ -74,7 +71,6 @@ private:
 template<typename T>
 inline ExecutionLine<T>::ExecutionLine(CreationParams const& params):
     lineElements_{params.lineElements},
-    executionPolicy_{params.executionPolicy},
     callback_{params.callback},
     destroyed_{false}
 {
@@ -114,7 +110,7 @@ inline void ExecutionLine<T>::start(T& ctx) {
             if (this->callback_)
                 this->callback_->onLineStart(ctx);
 
-            do {
+            while (true) {
                 std::size_t syncGateIndex = 0;
                 bool        shutdownFlag = false;
 
@@ -190,7 +186,7 @@ inline void ExecutionLine<T>::start(T& ctx) {
                         syncGateIndex++;
                     }
                 }
-            } while (this->executionPolicy_ == ExecutionPolicy::ContinuousExecution);
+            }
         }
         catch (...) {
             if (this->callback_) {

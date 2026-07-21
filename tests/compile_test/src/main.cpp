@@ -138,12 +138,10 @@ int main() {
             Line2: -------|---C---
         */
         TestExecutionLine::CreationParams const line1CreationParams{
-            pidux::ExecutionPolicy::ContinuousExecution,
             {unitA, syncGate, unitB},
             &line1Callback
         };
         TestExecutionLine::CreationParams const line2CreationParams{
-            pidux::ExecutionPolicy::ContinuousExecution,
             {syncGate, unitC},
             &line2Callback
         };
