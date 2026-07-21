@@ -1,6 +1,5 @@
 
 #pragma once
-#include <memory>
 #include "../SyncGate.h"
 #include "./ExecutionLineSharedData.h"
 

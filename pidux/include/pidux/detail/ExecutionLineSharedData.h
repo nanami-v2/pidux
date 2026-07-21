@@ -1,8 +1,6 @@
 
 #pragma once
 #include <bitset>
-#include <mutex>
-#include <thread>
 #include "../Config.h"
 
 namespace pidux::detail {
