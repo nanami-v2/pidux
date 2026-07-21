@@ -55,8 +55,9 @@ private:
     Implementation
 -----------------------------------------------------------------------------*/
 inline unsigned int SyncGate::addLockDependency(detail::SyncGateLockDependencyCallback const& lockDependencyCallback) {
-    std::unique_lock<std::mutex> const lock{this->sharedDataMutex_};
-
+    std::unique_lock<std::mutex> const lock{
+        this->sharedDataMutex_
+    };
     this->sharedData_.lockDependencyCount++;
     this->sharedData_.lockDependencyLatestId++;
     this->sharedData_.lockDependencyIds.push_back(this->sharedData_.lockDependencyLatestId);
@@ -67,94 +68,76 @@ inline unsigned int SyncGate::addLockDependency(detail::SyncGateLockDependencyCa
 }
 
 inline void SyncGate::removeLockDependency(unsigned int lockDependencyId) {
-    bool unlocked = false;
-    boost::container::static_vector<
-        detail::SyncGateLockDependencyCallback,
-        detail::SyncGateLockDependencyMaxCount
-    > lockDependencyCallbacks;
-    {
-        std::unique_lock<std::mutex> const lock{this->sharedDataMutex_};
+    std::unique_lock<std::mutex> const lock{
+        this->sharedDataMutex_
+    };
+    auto const ite = std::find(
+        this->sharedData_.lockDependencyIds.begin(),
+        this->sharedData_.lockDependencyIds.end(),
+        lockDependencyId
+    );
+    auto const found = (ite != this->sharedData_.lockDependencyIds.end());
 
-        auto const ite = std::find(
-            this->sharedData_.lockDependencyIds.begin(),
-            this->sharedData_.lockDependencyIds.end(),
-            lockDependencyId
-        );
-        auto const found = (ite != this->sharedData_.lockDependencyIds.end());
+    if (!found)
+        return;
+        
+    auto const lockDepdencyIndex = std::distance(this->sharedData_.lockDependencyIds.begin(), ite);
 
-        if (!found)
-            return;
-            
-        auto const lockDepdencyIndex = std::distance(this->sharedData_.lockDependencyIds.begin(), ite);
+    this->sharedData_.lockDependencyCount--;
+    this->sharedData_.lockDependencyIds.erase(this->sharedData_.lockDependencyIds.begin() + lockDepdencyIndex);
+    this->sharedData_.lockDependencyCallbacks.erase(this->sharedData_.lockDependencyCallbacks.begin() + lockDepdencyIndex);
+    this->sharedData_.lockDependencyUnlockedFlags.erase(this->sharedData_.lockDependencyUnlockedFlags.begin() + lockDepdencyIndex);
 
-        this->sharedData_.lockDependencyCount--;
-        this->sharedData_.lockDependencyIds.erase(this->sharedData_.lockDependencyIds.begin() + lockDepdencyIndex);
-        this->sharedData_.lockDependencyCallbacks.erase(this->sharedData_.lockDependencyCallbacks.begin() + lockDepdencyIndex);
-        this->sharedData_.lockDependencyUnlockedFlags.erase(this->sharedData_.lockDependencyUnlockedFlags.begin() + lockDepdencyIndex);
-
-        auto const unlockedCountAfterErase = std::count(
+    auto const unlockedCountAfterErase = std::count(
+        this->sharedData_.lockDependencyUnlockedFlags.begin(),
+        this->sharedData_.lockDependencyUnlockedFlags.end(),
+        true
+    );
+    if (unlockedCountAfterErase == this->sharedData_.lockDependencyCount) {
+        /* Reset unlocked flags */
+        std::fill(
             this->sharedData_.lockDependencyUnlockedFlags.begin(),
             this->sharedData_.lockDependencyUnlockedFlags.end(),
-            true
+            false
         );
-        if (unlockedCountAfterErase == this->sharedData_.lockDependencyCount) {
-            /* lock all depdency */
-            std::fill(
-                this->sharedData_.lockDependencyUnlockedFlags.begin(),
-                this->sharedData_.lockDependencyUnlockedFlags.end(),
-                false
-            );
-            unlocked = true;
-            lockDependencyCallbacks = this->sharedData_.lockDependencyCallbacks;
-        }
-    }
-    if (unlocked)
-        for (auto& callback : lockDependencyCallbacks)
+        for (auto& callback : this->sharedData_.lockDependencyCallbacks)
             callback.onUnlocked();
+    }
 }
 
 inline void SyncGate::requestUnlock(unsigned int lockDependencyId) noexcept {
-    bool unlocked = false;
-    boost::container::static_vector<
-        detail::SyncGateLockDependencyCallback,
-        detail::SyncGateLockDependencyMaxCount
-    > lockDependencyCallbacks;
-    {
-        std::unique_lock<std::mutex> lock{this->sharedDataMutex_};
+    std::unique_lock<std::mutex> const lock{
+        this->sharedDataMutex_
+    };
+    auto const ite = std::find(
+        this->sharedData_.lockDependencyIds.begin(),
+        this->sharedData_.lockDependencyIds.end(),
+        lockDependencyId
+    );
+    auto const found = (ite != this->sharedData_.lockDependencyIds.end());
 
-        auto const ite = std::find(
-            this->sharedData_.lockDependencyIds.begin(),
-            this->sharedData_.lockDependencyIds.end(),
-            lockDependencyId
-        );
-        auto const found = (ite != this->sharedData_.lockDependencyIds.end());
+    if (!found)
+        return;
+        
+    auto const lockDepdencyIndex = std::distance(this->sharedData_.lockDependencyIds.begin(), ite);
 
-        if (!found)
-            return;
-            
-        auto const lockDepdencyIndex = std::distance(this->sharedData_.lockDependencyIds.begin(), ite);
+    this->sharedData_.lockDependencyUnlockedFlags[lockDepdencyIndex] = true;
 
-        this->sharedData_.lockDependencyUnlockedFlags[lockDepdencyIndex] = true;
-
-        auto const unlockedCount = std::count(
+    auto const unlockedCount = std::count(
+        this->sharedData_.lockDependencyUnlockedFlags.begin(),
+        this->sharedData_.lockDependencyUnlockedFlags.end(),
+        true
+    );
+    if (unlockedCount == this->sharedData_.lockDependencyCount) {
+        /* Reset unlocked flags */
+        std::fill(
             this->sharedData_.lockDependencyUnlockedFlags.begin(),
             this->sharedData_.lockDependencyUnlockedFlags.end(),
-            true
+            false
         );
-        if (unlockedCount == this->sharedData_.lockDependencyCount) {
-            /* lock all depdency */
-            std::fill(
-                this->sharedData_.lockDependencyUnlockedFlags.begin(),
-                this->sharedData_.lockDependencyUnlockedFlags.end(),
-                false
-            );
-            unlocked = true;
-            lockDependencyCallbacks = this->sharedData_.lockDependencyCallbacks;
-        }
-    }
-    if (unlocked)
-        for (auto& callback : lockDependencyCallbacks)
+        for (auto& callback : this->sharedData_.lockDependencyCallbacks)
             callback.onUnlocked();
+    }
 }
 
 std::size_t SyncGate::lockDependencyCount() const noexcept {

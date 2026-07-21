@@ -8,7 +8,7 @@ namespace pidux::detail {
 #endif
 
 #ifndef PIDUX_SYNC_GATE_LOCK_DEPENDENCY_MAX_COUNT
-#define PIDUX_SYNC_GATE_LOCK_DEPENDENCY_MAX_COUNT 32
+#define PIDUX_SYNC_GATE_LOCK_DEPENDENCY_MAX_COUNT 16
 #endif
 
 static constexpr std::size_t ExecutionLineElementMaxCount = PIDUX_EXECUTION_LINE_ELEMENT_MAX_COUNT;

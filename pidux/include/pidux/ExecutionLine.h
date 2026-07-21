@@ -111,13 +111,14 @@ inline void ExecutionLine<T>::start(T& ctx) {
 
                     if (executionUnit) {
                         {
-                            std::unique_lock<std::mutex> lock{this->sharedData_->mutex};
+                            std::unique_lock<std::mutex> const lock{
+                                this->sharedData_->mutex
+                            };
                             shutdownFlag = this->sharedData_->shutdownFlag;
                         }
                         if (shutdownFlag) {
                             if (this->callback_)
                                 this->callback_->onLineEnd(ctx);
-
                             return;
                         }
                         try {
@@ -142,8 +143,9 @@ inline void ExecutionLine<T>::start(T& ctx) {
                             this->syncGateLockDependencyIds_[syncGateIndex]
                         );
                         {
-                            std::unique_lock<std::mutex> lock{this->sharedData_->mutex};
-
+                            std::unique_lock<std::mutex> const lock{
+                                this->sharedData_->mutex
+                            };
                             this->sharedData_->cv.wait(lock, [this, syncGateIndex] {
                                 return (
                                     this->sharedData_->shutdownFlag ||
@@ -158,7 +160,6 @@ inline void ExecutionLine<T>::start(T& ctx) {
                         if (shutdownFlag) {
                             if (this->callback_)
                                 this->callback_->onLineEnd(ctx);
-
                             return;
                         }
                         if (this->callback_)
