@@ -61,11 +61,6 @@ public:
                 << "[CRITICAL ERROR] unknown error" << std::endl;
         }
     }
-    void onSyncGateUnlocked(
-        [[maybe_unused]] TestContext& ctx,
-        [[maybe_unused]] pidux::SyncGate& syncGate
-    ) override {
-    }
     void onExecutionUnitStart(
         [[maybe_unused]] TestContext& ctx,
         pidux::ExecutionUnit<TestContext>& executionUnit

@@ -19,13 +19,13 @@ namespace pidux {
 template<typename T>
 class ExecutionLine {
 public:
-    using Element = std::variant<
+    using LineElement = std::variant<
         std::reference_wrapper<ExecutionUnit<T>>,
         std::reference_wrapper<SyncGate>
     >;
     struct CreationParams {
         boost::container::static_vector<
-            ExecutionLine::Element,
+            LineElement,
             ExecutionLineElementMaxCount
         > lineElements;
         ExecutionLineCallback<T>* callback{nullptr};
@@ -57,7 +57,7 @@ private:
         ExecutionLineElementMaxCount
     > syncGateLockDependencyIds_;
     boost::container::static_vector<
-        Element,
+        LineElement,
         ExecutionLineElementMaxCount
     > lineElements_;
     ExecutionLineCallback<T>* callback_;
@@ -183,9 +183,6 @@ inline void ExecutionLine<T>::start(T& ctx) {
                                 this->callback_->onLineEnd(ctx);
                             return;
                         }
-                        if (this->callback_)
-                            this->callback_->onSyncGateUnlocked(ctx, syncGate->get());
-
                         syncGateIndex++;
                     }
                 }
