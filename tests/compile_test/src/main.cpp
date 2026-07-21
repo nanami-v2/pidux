@@ -48,32 +48,38 @@ public:
             << "line '" << this->lineName_ << "' end" << std::endl
             << std::flush;
     }
-    void onCriticalError([[maybe_unused]] TestContext& ctx, std::exception_ptr error) noexcept {
+    void onCriticalError([[maybe_unused]] TestContext& ctx, std::exception_ptr error) noexcept override {
         try {
             std::rethrow_exception(error);
         }
         catch (std::exception const& e) {
             std::cerr
-                << "[FATAL] " << e.what() << std::endl;
+                << "[CRITICAL ERROR] " << e.what() << std::endl;
         }
         catch (...) {
             std::cerr
-                << "[FATAL] unknown error" << std::endl;
+                << "[CRITICAL ERROR] unknown error" << std::endl;
         }
     }
     void onSyncGateUnlocked(
         [[maybe_unused]] TestContext& ctx,
         [[maybe_unused]] pidux::SyncGate& syncGate
-    ) {
+    ) override {
     }
-    void onExecutionUnitStart([[maybe_unused]] TestContext& ctx, pidux::ExecutionUnit<TestContext>& executionUnit) {
+    void onExecutionUnitStart(
+        [[maybe_unused]] TestContext& ctx,
+        pidux::ExecutionUnit<TestContext>& executionUnit
+    ) override {
         std::cout
             << "ExecutionUnit...'"
             << typeid(executionUnit).name()
             << "' start" << std::endl
             << std::flush;
     }
-    void onExecutionUnitEnd([[maybe_unused]] TestContext& ctx, pidux::ExecutionUnit<TestContext>& executionUnit) {
+    void onExecutionUnitEnd(
+        [[maybe_unused]] TestContext& ctx,
+        pidux::ExecutionUnit<TestContext>& executionUnit
+    ) override {
         std::cout
             << "ExecutionUnit...'"
             << typeid(executionUnit).name()
@@ -83,20 +89,21 @@ public:
     void onExecutionUnitError(
         [[maybe_unused]] TestContext& ctx,
         pidux::ExecutionUnit<TestContext>& executionUnit,
-        std::exception_ptr executionUnitError
-    ) noexcept {
+        std::exception_ptr executionUnitError,
+        [[maybe_unused]] bool& executionUnitErrorRecovered
+    ) noexcept override {
         try {
             std::rethrow_exception(executionUnitError);
         }
         catch (std::exception const& e) {
             std::cerr
-                << "[ERROR] '"
+                << "[EXECUTION UNIT ERROR] '"
                 << typeid(executionUnit).name()
                 << "' : " << e.what() << std::endl;
         }
         catch (...) {
             std::cerr
-                << "[ERROR] '"
+                << "[EXECUTION UNIT ERROR] '"
                 << typeid(executionUnit).name()
                 << "' : unknown error" << std::endl;
         }

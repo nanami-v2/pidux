@@ -141,8 +141,20 @@ inline void ExecutionLine<T>::start(T& ctx) {
                         }
                         catch (...) {
                             if (this->callback_) {
-                                this->callback_->onExecutionUnitError(ctx, executionUnit->get(), std::current_exception());
-                                this->callback_->onLineEnd(ctx);
+                                bool executionUnitErrorRecovered = false;
+                                auto executionUnitError = std::current_exception();
+
+                                this->callback_->onExecutionUnitError(
+                                    ctx,
+                                    executionUnit->get(),
+                                    executionUnitError,
+                                    executionUnitErrorRecovered
+                                );
+                                if (!executionUnitErrorRecovered) {
+                                    this->callback_->onCriticalError(ctx, executionUnitError);
+                                    this->callback_->onLineEnd(ctx);
+                                    return;
+                                }
                             }
                             return;
                         }

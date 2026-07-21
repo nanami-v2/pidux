@@ -20,7 +20,8 @@ public:
     virtual void onExecutionUnitError(
         T& ctx,
         ExecutionUnit<T>& executionUnit,
-        std::exception_ptr executionUnitError
+        std::exception_ptr executionUnitError,
+        bool& executionUnitErrorRecovered
     ) noexcept = 0;
 };
 
