@@ -21,7 +21,7 @@ public:
         auto const randBase = ctx.randBase;
         auto const sleepTime = std::chrono::milliseconds{std::rand() % randBase};
 
-        std::cout << unitName_.c_str() << ",";
+        std::cout << unitName_ << std::endl;
         std::this_thread::sleep_for(sleepTime);
     }
 private:
@@ -124,7 +124,7 @@ int main() {
         auto const randBase = ctx.randBase;
         auto const sleepTime = std::chrono::milliseconds{std::rand() % randBase};
 
-        std::cout << "C,";
+        std::cout << "C" << std::endl;
         std::this_thread::sleep_for(sleepTime);
     });
     pidux::SyncGate syncGate{};

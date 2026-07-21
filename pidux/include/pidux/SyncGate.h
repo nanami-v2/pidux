@@ -5,11 +5,17 @@
 #include <mutex>
 #include <boost/container/static_vector.hpp>
 
-#include "./detail/SyncGateLockDependencyCallback.h"
+#include "./Config.h"
 
 namespace pidux {
 
 class SyncGate {
+public:
+    class LockDependencyCallback {
+    public:
+        virtual ~LockDependencyCallback() noexcept = default;
+        virtual void onUnlocked() = 0;
+    };
 public:
     SyncGate() noexcept = default;
     SyncGate(SyncGate const&) = delete;
@@ -20,9 +26,9 @@ public:
     SyncGate& operator=(SyncGate&&) noexcept = delete;
 
     unsigned int addLockDependency(
-        detail::SyncGateLockDependencyCallback const& lockDependencyCallback
+        LockDependencyCallback& lockDependencyCallback
     );
-    void removeLockDependency(
+    bool removeLockDependency(
         unsigned int lockDependencyId
     );
     void requestUnlock(
@@ -33,15 +39,15 @@ private:
     struct SharedData {
         boost::container::static_vector<
             unsigned int, 
-            detail::SyncGateLockDependencyMaxCount
+            SyncGateLockDependencyMaxCount
         > lockDependencyIds;
         boost::container::static_vector<
-            detail::SyncGateLockDependencyCallback,
-            detail::SyncGateLockDependencyMaxCount
+            LockDependencyCallback*,
+            SyncGateLockDependencyMaxCount
         > lockDependencyCallbacks;
         boost::container::static_vector<
             bool,
-            detail::SyncGateLockDependencyMaxCount
+            SyncGateLockDependencyMaxCount
         > lockDependencyUnlockedFlags;
 
         unsigned int lockDependencyCount{0};
@@ -54,21 +60,21 @@ private:
 /*-----------------------------------------------------------------------------
     Implementation
 -----------------------------------------------------------------------------*/
-inline unsigned int SyncGate::addLockDependency(detail::SyncGateLockDependencyCallback const& lockDependencyCallback) {
-    std::unique_lock<std::mutex> const lock{
+inline unsigned int SyncGate::addLockDependency(LockDependencyCallback& lockDependencyCallback) {
+    std::unique_lock<std::mutex> lock{
         this->sharedDataMutex_
     };
     this->sharedData_.lockDependencyCount++;
     this->sharedData_.lockDependencyLatestId++;
     this->sharedData_.lockDependencyIds.push_back(this->sharedData_.lockDependencyLatestId);
-    this->sharedData_.lockDependencyCallbacks.push_back(lockDependencyCallback);
+    this->sharedData_.lockDependencyCallbacks.push_back(&lockDependencyCallback);
     this->sharedData_.lockDependencyUnlockedFlags.push_back(false);
 
     return static_cast<unsigned int>(this->sharedData_.lockDependencyLatestId);
 }
 
-inline void SyncGate::removeLockDependency(unsigned int lockDependencyId) {
-    std::unique_lock<std::mutex> const lock{
+inline bool SyncGate::removeLockDependency(unsigned int lockDependencyId) {
+    std::unique_lock<std::mutex> lock{
         this->sharedDataMutex_
     };
     auto const ite = std::find(
@@ -79,7 +85,7 @@ inline void SyncGate::removeLockDependency(unsigned int lockDependencyId) {
     auto const found = (ite != this->sharedData_.lockDependencyIds.end());
 
     if (!found)
-        return;
+        return false;
         
     auto const lockDepdencyIndex = std::distance(this->sharedData_.lockDependencyIds.begin(), ite);
 
@@ -100,13 +106,14 @@ inline void SyncGate::removeLockDependency(unsigned int lockDependencyId) {
             this->sharedData_.lockDependencyUnlockedFlags.end(),
             false
         );
-        for (auto& callback : this->sharedData_.lockDependencyCallbacks)
-            callback.onUnlocked();
+        for (auto* callback : this->sharedData_.lockDependencyCallbacks)
+            callback->onUnlocked();
     }
+    return true;
 }
 
 inline void SyncGate::requestUnlock(unsigned int lockDependencyId) noexcept {
-    std::unique_lock<std::mutex> const lock{
+    std::unique_lock<std::mutex> lock{
         this->sharedDataMutex_
     };
     auto const ite = std::find(
@@ -135,8 +142,8 @@ inline void SyncGate::requestUnlock(unsigned int lockDependencyId) noexcept {
             this->sharedData_.lockDependencyUnlockedFlags.end(),
             false
         );
-        for (auto& callback : this->sharedData_.lockDependencyCallbacks)
-            callback.onUnlocked();
+        for (auto* callback : this->sharedData_.lockDependencyCallbacks)
+            callback->onUnlocked();
     }
 }
 
