@@ -19,7 +19,7 @@ public:
         sharedDataMutex{sharedDataMutex}
     {}
     void onUnlocked() override {
-        std::unique_lock<std::mutex> const lock{
+        std::unique_lock<std::mutex> lock{
             sharedDataMutex
         };
         sharedData.syncGateUnlockedFlags[syncGateIndex] = true;
