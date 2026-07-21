@@ -11,6 +11,7 @@
 #include "./SyncGate.h"
 #include "./ExecutionUnit.h"
 #include "./ExecutionLineCallback.h"
+#include "./ExecutionPolicy.h"
 #include "./detail/ExecutionLineSharedData.h"
 #include "./detail/ExecutionLineSyncGateCallback.h"
 
@@ -19,13 +20,14 @@ namespace pidux {
 template<typename T>
 class ExecutionLine {
 public:
-    using Element = std::variant<
+    using LineElement = std::variant<
         std::reference_wrapper<ExecutionUnit<T>>,
         std::reference_wrapper<SyncGate>
     >;
     struct CreationParams {
+        ExecutionPolicy executionPolicy;
         boost::container::static_vector<
-            ExecutionLine::Element,
+            LineElement,
             ExecutionLineElementMaxCount
         > lineElements;
         ExecutionLineCallback<T>* callback{nullptr};
@@ -57,9 +59,10 @@ private:
         ExecutionLineElementMaxCount
     > syncGateLockDependencyIds_;
     boost::container::static_vector<
-        Element,
+        LineElement,
         ExecutionLineElementMaxCount
     > lineElements_;
+    ExecutionPolicy executionPolicy_;
     ExecutionLineCallback<T>* callback_;
     bool destroyed_;
 };
@@ -71,6 +74,7 @@ private:
 template<typename T>
 inline ExecutionLine<T>::ExecutionLine(CreationParams const& params):
     lineElements_{params.lineElements},
+    executionPolicy_{params.executionPolicy},
     callback_{params.callback},
     destroyed_{false}
 {
@@ -110,7 +114,7 @@ inline void ExecutionLine<T>::start(T& ctx) {
             if (this->callback_)
                 this->callback_->onLineStart(ctx);
 
-            while (true) {
+            do {
                 std::size_t syncGateIndex = 0;
                 bool        shutdownFlag = false;
 
@@ -183,13 +187,10 @@ inline void ExecutionLine<T>::start(T& ctx) {
                                 this->callback_->onLineEnd(ctx);
                             return;
                         }
-                        if (this->callback_)
-                            this->callback_->onSyncGateUnlocked(ctx, syncGate->get());
-
                         syncGateIndex++;
                     }
                 }
-            }
+            } while (this->executionPolicy_ == ExecutionPolicy::ContinuousExecution);
         }
         catch (...) {
             if (this->callback_) {

@@ -14,7 +14,6 @@ public:
     virtual void onLineStart(T& ctx) = 0;
     virtual void onLineEnd(T& ctx) noexcept = 0;
     virtual void onCriticalError(T& ctx, std::exception_ptr error) noexcept = 0;
-    virtual void onSyncGateUnlocked(T& ctx, SyncGate& syncGate) = 0;
     virtual void onExecutionUnitStart(T& ctx, ExecutionUnit<T>& executionUnit) = 0;
     virtual void onExecutionUnitEnd(T& ctx, ExecutionUnit<T>& executionUnit) = 0;
     virtual void onExecutionUnitError(
