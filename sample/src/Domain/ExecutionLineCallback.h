@@ -12,24 +12,24 @@ class ExecutionLineCallback final: public pidux::ExecutionLineCallback<AppContex
 public:
     explicit ExecutionLineCallback(unsigned int lineNo):
         lineNo_{lineNo}
-    {}
-    void onLineStart([[maybeunused]] AppContext& ctx) override {
+    {
+        assert(lineNo >= 1);
+    }
+    void onLineStart([[maybe_unused]] AppContext& ctx) override {
         /* do noting */
     }
-    void onLineEnd([[maybeunused]] AppContext& ctx) noexcept override {
+    void onLineEnd([[maybe_unused]] AppContext& ctx) noexcept override {
         /* do noting */
     }
-    void onFatalError(AppContext& ctx, std::exception_ptr error) noexcept override {
-    }
-    void onSyncGateUnlocked(
-        [[maybeunused]] AppContext& ctx,
-        [[maybeunused]] pidux::SyncGate& syncGate
-    ) override {
-        /* do nothing */
+    void onCriticalError(
+        [[maybe_unused]] AppContext& ctx,
+        [[maybe_unused]] std::exception_ptr error
+    ) noexcept override {
+        /* TODO: error handling */
     }
     void onExecutionUnitStart(
-        [[maybeunused]] AppContext& ctx,
-        [[maybeunused]] pidux::ExecutionUnit<AppContext>& executionUnit
+        [[maybe_unused]] AppContext& ctx,
+        [[maybe_unused]] pidux::ExecutionUnit<AppContext>& executionUnit
     ) override {
         this->currentUnitStartTime_ = std::chrono::system_clock::now();
     }
@@ -39,6 +39,9 @@ public:
     ) override {
         this->currentUnitEndTime_ = std::chrono::system_clock::now();
 
+        std::unique_lock<std::mutex> lock{
+            ctx.eventQueueMutex
+        };
         ctx.eventQueue.push(
             ExecutionLineEventType::UnitExecuted{
                 this->lineNo_,
@@ -51,12 +54,15 @@ public:
                 )
             }
         );
+        ctx.eventQueueCv.notify_one();
     }
     void onExecutionUnitError(
-        AppContext& ctx,
-        pidux::ExecutionUnit<AppContext>& executionUnit,
-        std::exception_ptr executionUnitError
+        [[maybe_unused]] AppContext& ctx,
+        [[maybe_unused]] pidux::ExecutionUnit<AppContext>& executionUnit,
+        [[maybe_unused]] std::exception_ptr executionUnitError,
+        [[maybe_unused]] bool& executuinUnitRecovered
     ) noexcept override {
+        /* TODO: error handling */
     }
 private:
     unsigned int lineNo_;

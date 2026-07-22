@@ -7,29 +7,30 @@ namespace sample {
 
 class ExecutionUnit final: public pidux::ExecutionUnit<AppContext> {
 public:
-    explicit ExecutionUnit(unsigned int lineNo, unsigned int unitId):
-        lineNo_{lineNo},
+    explicit ExecutionUnit(unsigned int unitId):
         unitId_{unitId}
     {}
     void run(AppContext& ctx) override {
         if (this->uniformDistributionUninitialized_) {
             this->uniformDistributionUninitialized_ = false;
             this->uniformDistribution_ = std::uniform_int_distribution<std::chrono::milliseconds::rep>{
-                ctx.appConfig.randSleepTimeMin.count(),
-                ctx.appConfig.randSleepTimeMax.count()
+                ctx.randSleepTimeMin.count(),
+                ctx.randSleepTimeMax.count()
             };
         }
-        std::this_thread::sleep_for(
-            std::chrono::milliseconds{
-                this->uniformDistribution_(ctx.randEngineBuckets[this->lineNo_].engine)
-            }
-        );
+        std::chrono::milliseconds sleepTime;
+        {
+            std::unique_lock<std::mutex> lock{ctx.randEngineMutex};
+            sleepTime = std::chrono::milliseconds{
+                this->uniformDistribution_(ctx.randEngine)
+            };
+        }
+        std::this_thread::sleep_for(sleepTime);
     }
     unsigned int unitId() const noexcept {
         return this->unitId_;
     }
 private:
-    unsigned int lineNo_;
     unsigned int unitId_;
     bool uniformDistributionUninitialized_{true};
     std::uniform_int_distribution<std::chrono::milliseconds::rep> uniformDistribution_;

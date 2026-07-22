@@ -5,7 +5,7 @@ build_dir := build
 .PHONY: all
 all:
 	$(MAKE) -f $(firstword $(MAKEFILE_LIST)) compile-test
-	$(MAKE) -f $(firstword $(MAKEFILE_LIST)) package_test
+	$(MAKE) -f $(firstword $(MAKEFILE_LIST)) package-test
 	$(MAKE) -f $(firstword $(MAKEFILE_LIST)) sample
 
 .PHONY: compile-test
@@ -34,6 +34,6 @@ sample:
 		-DVCPKG_OVERLAY_PORTS="pidux-overlay-ports"
 	cmake --build $(build_dir)/sample
 
-.PHONY: clean
-clean:
+.PHONY: clean-all
+clean-all:
 	cmake -E rm -rf $(build_dir)

@@ -2,20 +2,21 @@
 #pragma once
 #include <random>
 #include <vector>
-#include <boost/circular_buffer.hpp>
-
-#include "./AppConfig.h"
-#include "./ExecutionLineEventQueue.h"
+#include <queue>
+#include <mutex>
+#include "./ExecutionLineEvent.h"
 
 namespace sample {
 
 struct AppContext {
-    struct alignas(std::hardware_destructive_interference_size) RandEngineBucket {
-        std::default_random_engine engine;
-    };
-    AppConfig appConfig;
-    ExecutionLineEventQueue eventQueue;
-    std::vector<RandEngineBucket> randEngineBuckets;
+    std::default_random_engine randEngine;
+    std::mutex                 randEngineMutex;
+    std::chrono::milliseconds  randSleepTimeMin;
+    std::chrono::milliseconds  randSleepTimeMax;
+
+    std::queue<ExecutionLineEvent> eventQueue;
+    std::mutex                     eventQueueMutex;
+    std::condition_variable        eventQueueCv;
 };
 
 } /* namespace sample */
