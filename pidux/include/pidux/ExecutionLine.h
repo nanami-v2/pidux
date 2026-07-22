@@ -23,15 +23,11 @@ public:
         std::reference_wrapper<ExecutionUnit<T>>,
         std::reference_wrapper<SyncGate>
     >;
-    struct CreationParams {
-        boost::container::static_vector<
-            LineElement,
-            ExecutionLineElementMaxCount
-        > lineElements;
-        ExecutionLineCallback<T>* callback{nullptr};
-    };
 public:
-    explicit ExecutionLine(CreationParams const& params);
+    explicit ExecutionLine(
+        boost::container::static_vector<LineElement, ExecutionLineElementMaxCount> const& lineElements,
+        ExecutionLineCallback<T>* callback = nullptr
+    );
     ExecutionLine(ExecutionLine const&) = delete;
     ExecutionLine(ExecutionLine&&) noexcept = delete;
     ~ExecutionLine() noexcept;
@@ -69,9 +65,12 @@ private:
 -----------------------------------------------------------------------------*/
 
 template<typename T>
-inline ExecutionLine<T>::ExecutionLine(CreationParams const& params):
-    lineElements_{params.lineElements},
-    callback_{params.callback},
+inline ExecutionLine<T>::ExecutionLine(
+    boost::container::static_vector<LineElement, ExecutionLineElementMaxCount> const& lineElements,
+    ExecutionLineCallback<T>* callback
+):
+    lineElements_{lineElements},
+    callback_{callback},
     destroyed_{false}
 {
     std::size_t syncGateIndex = 0;

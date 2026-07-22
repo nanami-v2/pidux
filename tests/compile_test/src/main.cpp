@@ -137,16 +137,8 @@ int main() {
             Line1: ---A---|---B---
             Line2: -------|---C---
         */
-        TestExecutionLine::CreationParams const line1CreationParams{
-            {unitA, syncGate, unitB},
-            &line1Callback
-        };
-        TestExecutionLine::CreationParams const line2CreationParams{
-            {syncGate, unitC},
-            &line2Callback
-        };
-        TestExecutionLine line1{line1CreationParams};
-        TestExecutionLine line2{line2CreationParams};
+        TestExecutionLine line1{{unitA, syncGate, unitB}, &line1Callback};
+        TestExecutionLine line2{{syncGate, unitC}, &line2Callback};
 
         std::cout
             << "LockDependencyCount of syncGate (all)..."
