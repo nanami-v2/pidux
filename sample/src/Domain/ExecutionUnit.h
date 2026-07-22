@@ -7,7 +7,7 @@ namespace sample {
 
 class ExecutionUnit final: public pidux::ExecutionUnit<AppContext> {
 public:
-    explicit ExecutionUnit(unsigned int unitId):
+    explicit ExecutionUnit(char unitId):
         unitId_{unitId}
     {}
     void run(AppContext& ctx) override {
@@ -27,11 +27,11 @@ public:
         }
         std::this_thread::sleep_for(sleepTime);
     }
-    unsigned int unitId() const noexcept {
+    char unitId() const noexcept {
         return this->unitId_;
     }
 private:
-    unsigned int unitId_;
+    char unitId_;
     bool uniformDistributionUninitialized_{true};
     std::uniform_int_distribution<std::chrono::milliseconds::rep> uniformDistribution_;
 };
