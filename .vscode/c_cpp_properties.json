@@ -3,11 +3,12 @@
         {
             "name": "on Windows",
             "intelliSenseMode": "msvc-x64",
-            "cppStandard": "c++17",
+            "cppStandard": "c++20",
             "includePath": [
                 "${workspaceFolder}/pidux/include",
                 "${workspaceFolder}/build/compile_test/vcpkg_installed/x64-windows/include",
-                "${workspaceFolder}/build/package_test/vcpkg_installed/x64-windows/include"
+                "${workspaceFolder}/build/package_test/vcpkg_installed/x64-windows/include",
+                "${workspaceFolder}/build/sample/vcpkg_installed/x64-windows/include"
             ],
             "defines": [
                 "_DEBUG"

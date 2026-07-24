@@ -3,7 +3,10 @@
 build_dir := build
 
 .PHONY: all
-all: compile-test .WAIT package-test
+all:
+	$(MAKE) -f $(firstword $(MAKEFILE_LIST)) compile-test
+	$(MAKE) -f $(firstword $(MAKEFILE_LIST)) package-test
+	$(MAKE) -f $(firstword $(MAKEFILE_LIST)) sample
 
 .PHONY: compile-test
 compile-test:
@@ -22,6 +25,15 @@ package-test:
 		-DVCPKG_OVERLAY_PORTS="pidux-overlay-ports"
 	cmake --build $(build_dir)/package_test
 
-.PHONY: clean
-clean:
+.PHONY: sample
+sample:
+	cmake \
+		-S sample \
+		-B $(build_dir)/sample \
+		-DCMAKE_TOOLCHAIN_FILE="$(VCPKG_ROOT)\scripts\buildsystems\vcpkg.cmake" \
+		-DVCPKG_OVERLAY_PORTS="pidux-overlay-ports"
+	cmake --build $(build_dir)/sample
+
+.PHONY: clean-all
+clean-all:
 	cmake -E rm -rf $(build_dir)
