@@ -5,9 +5,6 @@
 
 - [Concept](#concept)
 - [Requirements](#requirements)
-- [How to Install](#how-to-install)
-  - [CMake](#cmake)
-  - [CMake with vcpkg](#cmake-with-vcpkg)
 - [How to Use](#how-to-use)
 
 ## Concept
@@ -35,19 +32,6 @@
 
 - `c++17` or later
 - `boost/container`
-
-## How to Install
-
-### CMake
-
-### CMake with vcpkg
-
-```cmake
-find_package(pidux CONFIG REQUIRED)
-
-add_executable(main src/main.cpp)
-target_link_libraries(main PRIVATE pidux::pidux)
-```
 
 ## How to Use
 
